@@ -481,10 +481,19 @@ input, button, textarea {
 
 .message-bubble {
   max-width: 80%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
   animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.message-with-cursor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .message-bubble.user {
@@ -500,6 +509,23 @@ input, button, textarea {
   border-radius: 12px;
   font-size: 0.95rem;
   line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+  max-width: 100%;
+}
+
+.message-paragraph,
+.message-list-item {
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.message-time {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  opacity: 0.85;
 }
 
 .user .message-content {
@@ -600,12 +626,6 @@ input, button, textarea {
   animation: blink 1s step-end infinite;
   font-weight: 300;
   margin-left: 2px;
-}
-
-.message-with-cursor {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
 }
 
 .message-with-cursor .message-bubble.user + .streaming-cursor,

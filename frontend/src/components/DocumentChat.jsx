@@ -90,8 +90,9 @@ export default function DocumentChat({ document, token, onBack }) {
     setInputText('');
 
     const isRetry = options.useCloud || options.forceLocal;
+    const now = new Date().toISOString();
     if (!isRetry) {
-      setMessages(prev => [...prev, { role: 'user', content: text }]);
+      setMessages(prev => [...prev, { role: 'user', content: text, created_at: now }]);
     }
 
     try {
@@ -128,7 +129,8 @@ export default function DocumentChat({ document, token, onBack }) {
       setLoading(false);
       setStreaming(true);
       setLoadingStage('');
-      setMessages(prev => [...prev, { role: 'assistant', content: '', streaming: true }]);
+      const assistantStartedAt = new Date().toISOString();
+      setMessages(prev => [...prev, { role: 'assistant', content: '', streaming: true, created_at: assistantStartedAt }]);
 
       let accumulated = '';
       let modelUsed = '';
@@ -160,11 +162,13 @@ export default function DocumentChat({ document, token, onBack }) {
               const last = updated[updated.length - 1];
               if (last?.role === 'assistant') {
                 updated[updated.length - 1] = {
+                  ...last,
                   role: 'assistant',
                   content: accumulated,
                   model_used: modelUsed,
                   citations,
-                  streaming: false
+                  streaming: false,
+                  created_at: last.created_at || new Date().toISOString()
                 };
               }
               return updated;
@@ -177,7 +181,8 @@ export default function DocumentChat({ document, token, onBack }) {
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: `Error: ${error.message}. Please verify the backend is running and Ollama config is correct.`,
-        isError: true
+        isError: true,
+        created_at: new Date().toISOString()
       }]);
     } finally {
       setLoading(false);

@@ -100,9 +100,10 @@ async function consumeGroqStream(response, onToken) {
     buffer = lines.pop() || '';
 
     for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const payload = line.slice(6).trim();
-      if (payload === '[DONE]') continue;
+      if (!line.startsWith('data:')) continue;
+      let payload = line.slice(5);
+      if (payload.startsWith(' ')) payload = payload.slice(1);
+      if (!payload || payload === '[DONE]') continue;
       try {
         const data = JSON.parse(payload);
         const token = data.choices?.[0]?.delta?.content || '';

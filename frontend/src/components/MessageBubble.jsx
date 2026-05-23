@@ -1,8 +1,22 @@
 import React from 'react';
 import { Cpu, User, FileText } from 'lucide-react';
 
+function formatMessageTime(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
 export default function MessageBubble({ msg }) {
   const isUser = msg.role === 'user';
+  const timeLabel = formatMessageTime(msg.created_at);
 
   const formatInline = (line) => {
     const parts = line.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g);
@@ -10,16 +24,7 @@ export default function MessageBubble({ msg }) {
     return parts.map((part, index) => {
       if (part.startsWith('`') && part.endsWith('`')) {
         return (
-          <code
-            key={index}
-            style={{
-              background: 'rgba(255,255,255,0.08)',
-              padding: '2px 4px',
-              borderRadius: '4px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.85em'
-            }}
-          >
+          <code key={index} className="message-inline-code">
             {part.slice(1, -1)}
           </code>
         );
@@ -41,14 +46,14 @@ export default function MessageBubble({ msg }) {
       const trimmed = line.trim();
       if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
         return (
-          <li key={idx} style={{ marginLeft: '20px', marginBottom: '4px' }}>
+          <li key={idx} className="message-list-item">
             {formatInline(trimmed.substring(2))}
           </li>
         );
       }
 
       return (
-        <p key={idx} style={{ marginBottom: trimmed === '' ? '12px' : '6px' }}>
+        <p key={idx} className={trimmed === '' ? 'message-paragraph-spaced' : 'message-paragraph'}>
           {formatInline(line)}
         </p>
       );
@@ -57,11 +62,10 @@ export default function MessageBubble({ msg }) {
 
   return (
     <div className={`message-bubble ${isUser ? 'user' : 'assistant'}`}>
-      
-      {/* Sender profile header */}
       <div className="message-meta" style={{ justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
         {isUser ? (
           <>
+            {timeLabel && <span className="message-time">{timeLabel}</span>}
             <span>You</span>
             <User size={12} />
           </>
@@ -70,24 +74,15 @@ export default function MessageBubble({ msg }) {
             <Cpu size={12} style={{ color: msg.isError ? '#f43f5e' : '#06b6d4' }} />
             <span>Assistant</span>
             {msg.model_used && (
-              <span style={{ 
-                background: 'rgba(255,255,255,0.05)', 
-                border: '1px solid rgba(255,255,255,0.08)',
-                padding: '1px 6px',
-                borderRadius: '4px',
-                fontSize: '0.7rem',
-                color: '#9ca3af'
-              }}>
-                {msg.model_used}
-              </span>
+              <span className="message-model-badge">{msg.model_used}</span>
             )}
+            {timeLabel && <span className="message-time">{timeLabel}</span>}
           </>
         )}
       </div>
 
-      {/* Main bubble */}
-      <div 
-        className="message-content" 
+      <div
+        className="message-content"
         style={{
           color: msg.isError ? '#f43f5e' : 'inherit',
           borderColor: msg.isError ? 'rgba(244, 63, 94, 0.3)' : undefined
@@ -96,10 +91,9 @@ export default function MessageBubble({ msg }) {
         {formatContent(msg.content)}
       </div>
 
-      {/* Citations block for Assistant responses */}
       {!isUser && msg.citations && msg.citations.length > 0 && (
         <div className="citations-wrapper">
-          <span style={{ fontSize: '0.75rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px', width: '100%', marginBottom: '2px' }}>
+          <span className="citations-label">
             <FileText size={10} /> Source Documents:
           </span>
           {msg.citations.map((citation, index) => (
@@ -109,7 +103,6 @@ export default function MessageBubble({ msg }) {
           ))}
         </div>
       )}
-
     </div>
   );
 }

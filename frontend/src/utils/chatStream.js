@@ -1,3 +1,11 @@
+/** Parse SSE data line — preserves leading spaces inside token text (SSE spec strips one space after "data:" only). */
+function parseSseDataLine(line) {
+  if (!line.startsWith('data:')) return null;
+  let payload = line.slice(5);
+  if (payload.startsWith(' ')) payload = payload.slice(1);
+  return payload;
+}
+
 export async function consumeChatStream(response, onToken, onMeta) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -12,9 +20,11 @@ export async function consumeChatStream(response, onToken, onMeta) {
     buffer = parts.pop() || '';
 
     for (const part of parts) {
-      const line = part.trim();
-      if (!line.startsWith('data:')) continue;
-      const payload = line.slice(5).trimStart();
+      const line = part.split('\n').find(l => l.startsWith('data:'));
+      if (!line) continue;
+
+      const payload = parseSseDataLine(line);
+      if (payload === null) continue;
 
       if (payload === '[DONE]') {
         onMeta({ done: true });
