@@ -18,9 +18,17 @@ if %ERRORLEVEL%==0 (
 )
 
 git commit -m "%MSG%"
-if %ERRORLEVEL%==0 (
-  echo Committed: %MSG%
-) else (
+if %ERRORLEVEL% neq 0 (
   echo Commit failed.
   exit /b 1
 )
+
+echo Committed: %MSG%
+
+git push origin HEAD
+if %ERRORLEVEL% neq 0 (
+  echo Push failed. Run: git push origin HEAD
+  exit /b 1
+)
+
+echo Pushed to GitHub.

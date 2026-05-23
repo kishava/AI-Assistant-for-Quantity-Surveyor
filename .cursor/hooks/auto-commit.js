@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Cursor stop hook — auto-commits any uncommitted changes when an agent task ends.
+ * Cursor stop hook — auto-commits and pushes any uncommitted changes when an agent task ends.
  * Reads stop-hook JSON from stdin (ignored). Fails open on errors.
  */
 
@@ -26,7 +26,6 @@ function quoteMessage(msg) {
 }
 
 try {
-  // Consume stdin from the stop hook payload
   try {
     readFileSync(0, 'utf8');
   } catch {
@@ -47,6 +46,9 @@ try {
   const msg = run('node .cursor/hooks/generate-commit-msg.js');
   run(`git commit -m ${quoteMessage(msg)}`);
   process.stderr.write(`[auto-commit] ${msg}\n`);
+
+  run('git push origin HEAD');
+  process.stderr.write('[auto-commit] pushed to GitHub\n');
 } catch (err) {
   process.stderr.write(`[auto-commit] skipped: ${err.message}\n`);
 }

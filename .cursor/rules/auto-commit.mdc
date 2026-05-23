@@ -1,9 +1,9 @@
 ---
-description: Auto-commit after every completed agent task
+description: Auto-commit and push after every completed agent task
 alwaysApply: true
 ---
 
-# Auto-commit on every task
+# Auto-commit and push on every task
 
 After completing **any** code change, fix, or feature — no exceptions:
 
@@ -13,8 +13,9 @@ After completing **any** code change, fix, or feature — no exceptions:
    ```
 2. Use prefixes: `feat:` (features), `fix:` (bugs), `style:` (UI/CSS), `docs:` (README), `chore:` (config/hooks).
 3. If no custom message is needed, run `commit.bat` with no arguments — it auto-generates one.
-4. Do **not** skip the commit. Do **not** wait for the user to ask.
-5. Do **not** commit secrets (`.env`, credentials). These are gitignored.
-6. One commit per logical task. If you finish multiple distinct tasks in one session, commit after each one.
+4. `commit.bat` automatically runs `git push origin HEAD` after each successful commit.
+5. Do **not** skip the commit/push. Do **not** wait for the user to ask.
+6. Do **not** commit secrets (`.env`, credentials). These are gitignored.
+7. One commit per logical task. If you finish multiple distinct tasks in one session, commit after each one.
 
-The Cursor `stop` hook also commits any leftover changes when the agent session ends.
+The Cursor `stop` hook also commits and pushes any leftover changes when the agent session ends.
