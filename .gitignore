@@ -1,0 +1,15 @@
+node_modules/
+dist/
+
+.env
+*.log
+
+AI Assistant for QS/
+
+backend/uploads/
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+chroma_data/
+
+coverage/
