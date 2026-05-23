@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { UploadCloud, FileText, Trash2, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import DocumentChat from './DocumentChat.jsx';
+import { ACCEPT_ATTRIBUTE, SUPPORTED_FORMATS_LABEL } from '../config/fileTypes.js';
 
 export default function DocumentUpload({ token }) {
   const [documents, setDocuments] = useState([]);
@@ -184,7 +185,7 @@ export default function DocumentUpload({ token }) {
       <div>
         <h2 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '6px' }}>Document Library</h2>
         <p style={{ fontSize: '0.85rem', color: '#9ca3af' }}>
-          Upload PDF, DOCX, or text files. The system parses and chunks them locally for instant offline search retrieval.
+          Upload QS documents, spreadsheets, or site photos. Files are parsed and indexed locally for semantic search.
         </p>
       </div>
 
@@ -220,7 +221,7 @@ export default function DocumentUpload({ token }) {
           type="file"
           style={{ display: 'none' }}
           onChange={handleFileInputChange}
-          accept=".pdf,.docx,.txt,.md"
+          accept={ACCEPT_ATTRIBUTE}
           disabled={uploading}
         />
         
@@ -231,7 +232,7 @@ export default function DocumentUpload({ token }) {
               {uploading ? 'Uploading and indexing file...' : 'Drag & drop document here, or click to browse'}
             </p>
             <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '4px' }}>
-              Supports PDF, DOCX, TXT, MD up to 10MB
+              Supports {SUPPORTED_FORMATS_LABEL}
             </p>
           </div>
           {uploading && (

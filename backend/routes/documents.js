@@ -6,6 +6,8 @@ import { fileURLToPath } from 'url';
 import db from '../db.js';
 import authMiddleware from '../middleware/auth.js';
 import { parseDocument } from '../services/docParser.js';
+import { validateUploadedFile } from '../services/fileValidation.js';
+import { ALLOWED_EXTENSIONS, SUPPORTED_FORMATS_LABEL } from '../config/fileTypes.js';
 import { chunkText } from '../services/chunker.js';
 import { embedBatch } from '../services/embedder.js';
 import { storeChunks, deleteDocumentChunks } from '../services/vectorStore.js';
@@ -35,40 +37,16 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowedExts = ['.pdf', '.docx', '.txt', '.md'];
     const ext = path.extname(file.originalname).toLowerCase();
-    if (allowedExts.includes(ext)) {
+    if (ALLOWED_EXTENSIONS.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only PDF, DOCX, TXT, and MD are supported.'));
+      cb(new Error(`Invalid file type. Supported: ${SUPPORTED_FORMATS_LABEL}`));
     }
   }
 });
-
-async function validateUploadedFile(file) {
-  const ext = path.extname(file.originalname).toLowerCase();
-  const handle = await fs.promises.open(file.path, 'r');
-  try {
-    const { buffer } = await handle.read(Buffer.alloc(8), 0, 8, 0);
-    const header = buffer.toString('hex');
-    const asciiHeader = buffer.toString('utf8');
-
-    if (ext === '.pdf') {
-      return asciiHeader.startsWith('%PDF-');
-    }
-    if (ext === '.docx') {
-      return asciiHeader.startsWith('PK');
-    }
-    if (ext === '.txt' || ext === '.md') {
-      return !header.startsWith('4d5a') && !header.startsWith('7f454c46');
-    }
-    return false;
-  } finally {
-    await handle.close();
-  }
-}
 
 // Background processor for parsing and chunking
 async function processDocument(docId, filePath) {
