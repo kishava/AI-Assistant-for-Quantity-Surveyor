@@ -1,21 +1,22 @@
 import Database from 'better-sqlite3';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import paths, { ensureDataDirs } from './config/paths.js';
 
-dotenv.config();
+if (fs.existsSync(paths.envFile)) {
+  dotenv.config({ path: paths.envFile });
+} else {
+  dotenv.config();
+}
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+ensureDataDirs();
 
-const dbPath = process.env.DATABASE_URL || path.join(__dirname, 'qs_ai.db');
+const dbPath = paths.databaseFile;
 const db = new Database(dbPath);
 
-// Enable foreign keys
 db.pragma('foreign_keys = ON');
 db.pragma('journal_mode = WAL');
 
-// Create tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,7 +45,6 @@ db.exec(`
     FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE
   );
 
-  -- Virtual table for SQLite Full-Text Search (FTS5)
   CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     content,
     chunk_id UNINDEXED,

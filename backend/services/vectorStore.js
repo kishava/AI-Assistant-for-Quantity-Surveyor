@@ -1,6 +1,7 @@
 import { ChromaClient } from 'chromadb';
 
-const client = new ChromaClient({ path: 'http://localhost:8000' });
+const CHROMA_URL = process.env.CHROMA_URL || 'http://localhost:8000';
+const client = new ChromaClient({ path: CHROMA_URL });
 const COLLECTION_NAME = 'qs_documents';
 
 let collection = null;
@@ -15,9 +16,6 @@ async function getCollection() {
   return collection;
 }
 
-// Store chunks with embeddings
-// chunks: [{ id, text, documentId, chunkIndex, userId }]
-// embeddings: number[][] — one per chunk
 export async function storeChunks(chunks, embeddings) {
   const col = await getCollection();
   await col.upsert({
@@ -32,24 +30,45 @@ export async function storeChunks(chunks, embeddings) {
   });
 }
 
-// Query top-k relevant chunks for a given query embedding
 export async function searchChunks(queryEmbedding, topK = 5, documentId = null, userId = null) {
-  const col = await getCollection();
-  const where = documentId
-    ? { documentId: String(documentId) }
-    : userId
-      ? { userId: String(userId) }
-      : undefined;
-  const results = await col.query({
-    queryEmbeddings: [queryEmbedding],
-    nResults: topK,
-    where
-  });
-  return results.documents[0] || [];
+  try {
+    const col = await getCollection();
+    const where = documentId
+      ? { documentId: String(documentId) }
+      : userId
+        ? { userId: String(userId) }
+        : undefined;
+    const results = await col.query({
+      queryEmbeddings: [queryEmbedding],
+      nResults: topK,
+      where
+    });
+    return results.documents[0] || [];
+  } catch (error) {
+    console.warn('ChromaDB search unavailable:', error.message);
+    return [];
+  }
 }
 
-// Delete all chunks for a document
 export async function deleteDocumentChunks(documentId) {
   const col = await getCollection();
   await col.delete({ where: { documentId: String(documentId) } });
+}
+
+export async function checkChromaHealth() {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${CHROMA_URL}/api/v2/heartbeat`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return { status: 'error', message: `HTTP ${res.status}` };
+    return { status: 'ok', url: CHROMA_URL };
+  } catch (err) {
+    try {
+      await client.heartbeat();
+      return { status: 'ok', url: CHROMA_URL };
+    } catch (inner) {
+      return { status: 'error', message: inner.message || err.message };
+    }
+  }
 }

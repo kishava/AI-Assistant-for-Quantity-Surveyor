@@ -1,0 +1,29 @@
+{
+  "name": "qs-assistant-desktop",
+  "version": "1.0.0",
+  "description": "QS Assistant desktop shell (Phase 2)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.saegis.qsassistant",
+    "productName": "QS Assistant",
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

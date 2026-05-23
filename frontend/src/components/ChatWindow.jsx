@@ -2,48 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Send, Sparkles, ShieldCheck } from 'lucide-react';
 import MessageBubble from './MessageBubble.jsx';
 import CloudConsentModal from './CloudConsentModal.jsx';
-
-async function consumeChatStream(response, onToken, onMeta) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split('\n\n');
-    buffer = parts.pop() || '';
-
-    for (const part of parts) {
-      const line = part.trim();
-      if (!line.startsWith('data:')) continue;
-      const payload = line.slice(5).trimStart();
-
-      if (payload === '[DONE]') {
-        onMeta({ done: true });
-      } else if (payload.startsWith('[MODEL]')) {
-        onMeta({ model: payload.slice(7) });
-      } else if (payload.startsWith('[CITATIONS]')) {
-        try {
-          onMeta({ citations: JSON.parse(payload.slice(11)) });
-        } catch {
-          onMeta({ citations: [] });
-        }
-      } else if (payload.startsWith('[ERROR]')) {
-        onMeta({ error: payload.slice(7) });
-      } else {
-        onToken(payload);
-      }
-    }
-  }
-}
+import { consumeChatStream } from '../utils/chatStream.js';
 
 export default function ChatWindow({ token }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [autoCloud, setAutoCloud] = useState(false);
 
@@ -91,6 +56,7 @@ export default function ChatWindow({ token }) {
     if (!text.trim() || loading) return;
 
     setLoading(true);
+    setLoadingStage('Connecting…');
     setInputText('');
 
     const isRetry = options.useCloud || options.forceLocal;
@@ -132,6 +98,7 @@ export default function ChatWindow({ token }) {
 
       setLoading(false);
       setStreaming(true);
+      setLoadingStage('');
       setMessages(prev => [...prev, { role: 'assistant', content: '', streaming: true }]);
 
       let accumulated = '';
@@ -141,7 +108,7 @@ export default function ChatWindow({ token }) {
       await consumeChatStream(
         response,
         (tokenPart) => {
-          accumulated += (accumulated ? ' ' : '') + tokenPart;
+          accumulated += tokenPart;
           setMessages(prev => {
             const updated = [...prev];
             const last = updated[updated.length - 1];
@@ -152,11 +119,13 @@ export default function ChatWindow({ token }) {
           });
         },
         (meta) => {
+          if (meta.stage) setLoadingStage(meta.stage);
           if (meta.model) modelUsed = meta.model;
           if (meta.citations) citations = meta.citations;
           if (meta.error) accumulated = `Error: ${meta.error}`;
           if (meta.done) {
             setStreaming(false);
+            setLoadingStage('');
             setMessages(prev => {
               const updated = [...prev];
               const last = updated[updated.length - 1];
@@ -243,7 +212,7 @@ export default function ChatWindow({ token }) {
             gap: '4px'
           }}>
             {autoCloud ? <Sparkles size={12} /> : <ShieldCheck size={12} />}
-            {autoCloud ? 'Groq Active' : 'Offline First'}
+            {autoCloud ? 'Cloud via Groq' : 'Offline (Ollama)'}
           </div>
         </div>
       </div>
@@ -279,11 +248,15 @@ export default function ChatWindow({ token }) {
         {loading && (
           <div className="message-bubble assistant">
             <div className="message-content">
-              <span className="pulse-dots">
-                <span></span>
-                <span></span>
-                <span></span>
-              </span>
+              {loadingStage ? (
+                <span className="loading-stage-text">{loadingStage}</span>
+              ) : (
+                <span className="pulse-dots">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </span>
+              )}
             </div>
           </div>
         )}

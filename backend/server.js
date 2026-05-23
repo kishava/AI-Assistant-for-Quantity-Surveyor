@@ -1,16 +1,23 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Import routes
 import authRoutes from './routes/auth.js';
 import documentRoutes from './routes/documents.js';
 import chatRoutes from './routes/chat.js';
+import paths, { ensureDataDirs } from './config/paths.js';
+import { getSystemHealth } from './services/healthCheck.js';
 
-// Load environment variables
-dotenv.config();
+if (fs.existsSync(paths.envFile)) {
+  dotenv.config({ path: paths.envFile });
+} else {
+  dotenv.config({ path: path.join(paths.projectRoot, '.env') });
+}
+
+ensureDataDirs();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,13 +30,14 @@ const defaultAllowedOrigins = [
   'http://127.0.0.1:3000',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  `http://localhost:${PORT}`,
+  `http://127.0.0.1:${PORT}`,
 ];
 const allowedOrigins = (process.env.CORS_ORIGIN || defaultAllowedOrigins.join(','))
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
 
-// Middlewares
 app.use(cors({
   origin(origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -42,20 +50,27 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Serve parsed uploads statically if needed (for security, keep this restricted or private)
-// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/chat', chatRoutes);
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', time: new Date().toISOString() });
+app.get('/api/health', async (req, res) => {
+  try {
+    const health = await getSystemHealth();
+    res.status(200).json(health);
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message });
+  }
 });
 
-// Error handling middleware
+if (paths.isProduction && fs.existsSync(paths.frontendDist)) {
+  app.use(express.static(paths.frontendDist));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(paths.frontendDist, 'index.html'));
+  });
+}
+
 app.use((err, req, res, next) => {
   console.error('Unhandled server error:', err);
   res.status(err.status || 500).json({
@@ -63,10 +78,11 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start Express server
-const server = app.listen(PORT, HOST, () => {
+app.listen(PORT, HOST, () => {
   console.log(`==========================================`);
   console.log(`  QS Assistant Backend Server Starting...  `);
   console.log(`  Running on: http://${HOST}:${PORT}      `);
+  console.log(`  Mode: ${paths.isProduction ? 'production' : 'development'}`);
+  console.log(`  Data: ${paths.appDataDir}`);
   console.log(`==========================================`);
 });

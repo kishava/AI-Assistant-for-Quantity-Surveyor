@@ -6,8 +6,10 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
+    "start:prod": "node start-prod.js",
     "dev": "nodemon server.js",
-    "lan-ip": "node scripts/getLocalIP.js"
+    "lan-ip": "node scripts/getLocalIP.js",
+    "build:frontend": "cd ../frontend && npm run build"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

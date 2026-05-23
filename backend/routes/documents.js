@@ -2,7 +2,6 @@ import express from 'express';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import db from '../db.js';
 import authMiddleware from '../middleware/auth.js';
 import { parseDocument } from '../services/docParser.js';
@@ -12,14 +11,11 @@ import { chunkText } from '../services/chunker.js';
 import { embedBatch } from '../services/embedder.js';
 import { storeChunks, deleteDocumentChunks } from '../services/vectorStore.js';
 import { routeQuery } from '../services/aiRouter.js';
+import paths from '../config/paths.js';
 
 const router = express.Router();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Ensure upload directory exists
-const uploadDir = path.join(__dirname, '../uploads');
+const uploadDir = paths.uploadsDir;
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }

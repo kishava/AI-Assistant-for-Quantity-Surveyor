@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
 import MessageBubble from './MessageBubble.jsx';
 import CloudConsentModal from './CloudConsentModal.jsx';
+import { consumeChatStream } from '../utils/chatStream.js';
 
 function formatCell(value) {
   if (value === null || value === undefined || value === '') {
@@ -52,47 +53,11 @@ function BoqTable({ items }) {
   );
 }
 
-async function consumeChatStream(response, onToken, onMeta) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split('\n\n');
-    buffer = parts.pop() || '';
-
-    for (const part of parts) {
-      const line = part.trim();
-      if (!line.startsWith('data:')) continue;
-      const payload = line.slice(5).trimStart();
-
-      if (payload === '[DONE]') {
-        onMeta({ done: true });
-      } else if (payload.startsWith('[MODEL]')) {
-        onMeta({ model: payload.slice(7) });
-      } else if (payload.startsWith('[CITATIONS]')) {
-        try {
-          onMeta({ citations: JSON.parse(payload.slice(11)) });
-        } catch {
-          onMeta({ citations: [] });
-        }
-      } else if (payload.startsWith('[ERROR]')) {
-        onMeta({ error: payload.slice(7) });
-      } else {
-        onToken(payload);
-      }
-    }
-  }
-}
-
 export default function DocumentChat({ document, token, onBack }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [autoCloud] = useState(false);
   const [boqItems, setBoqItems] = useState(null);
@@ -121,6 +86,7 @@ export default function DocumentChat({ document, token, onBack }) {
     if (!text.trim() || loading) return;
 
     setLoading(true);
+    setLoadingStage('Connecting…');
     setInputText('');
 
     const isRetry = options.useCloud || options.forceLocal;
@@ -161,6 +127,7 @@ export default function DocumentChat({ document, token, onBack }) {
 
       setLoading(false);
       setStreaming(true);
+      setLoadingStage('');
       setMessages(prev => [...prev, { role: 'assistant', content: '', streaming: true }]);
 
       let accumulated = '';
@@ -170,7 +137,7 @@ export default function DocumentChat({ document, token, onBack }) {
       await consumeChatStream(
         response,
         (tokenPart) => {
-          accumulated += (accumulated ? ' ' : '') + tokenPart;
+          accumulated += tokenPart;
           setMessages(prev => {
             const updated = [...prev];
             const last = updated[updated.length - 1];
@@ -181,11 +148,13 @@ export default function DocumentChat({ document, token, onBack }) {
           });
         },
         (meta) => {
+          if (meta.stage) setLoadingStage(meta.stage);
           if (meta.model) modelUsed = meta.model;
           if (meta.citations) citations = meta.citations;
           if (meta.error) accumulated = `Error: ${meta.error}`;
           if (meta.done) {
             setStreaming(false);
+            setLoadingStage('');
             setMessages(prev => {
               const updated = [...prev];
               const last = updated[updated.length - 1];
@@ -304,9 +273,13 @@ export default function DocumentChat({ document, token, onBack }) {
           {loading && (
             <div className="message-bubble assistant">
               <div className="message-content">
-                <span className="pulse-dots">
-                  <span></span><span></span><span></span>
-                </span>
+                {loadingStage ? (
+                  <span className="loading-stage-text">{loadingStage}</span>
+                ) : (
+                  <span className="pulse-dots">
+                    <span></span><span></span><span></span>
+                  </span>
+                )}
               </div>
             </div>
           )}
