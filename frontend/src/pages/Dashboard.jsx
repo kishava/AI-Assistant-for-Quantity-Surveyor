@@ -5,6 +5,7 @@ import DocumentUpload from '../components/DocumentUpload.jsx';
 
 export default function Dashboard({ token, user, onLogout }) {
   const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'documents'
+  const [selectedConversationId, setSelectedConversationId] = useState('default');
 
   return (
     <div className="app-container">
@@ -12,14 +13,17 @@ export default function Dashboard({ token, user, onLogout }) {
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
+        selectedConversationId={selectedConversationId}
+        setSelectedConversationId={setSelectedConversationId}
         user={user} 
         onLogout={onLogout} 
+        token={token}
       />
 
       {/* Main Workspace Area */}
       <main className="workspace">
         {activeTab === 'chat' ? (
-          <ChatWindow token={token} />
+          <ChatWindow token={token} conversationId={selectedConversationId} />
         ) : (
           <DocumentUpload token={token} />
         )}

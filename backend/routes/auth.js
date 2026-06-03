@@ -19,11 +19,26 @@ router.post('/register', async (req, res) => {
   if (usernameValue.length > 80) {
     return res.status(400).json({ error: 'Username must be 80 characters or fewer' });
   }
+  const usernameRegex = /^[a-zA-Z0-9_-]+$/;
+  if (!usernameRegex.test(usernameValue)) {
+    return res.status(400).json({ error: 'Username can only contain alphanumeric characters, underscores, and dashes.' });
+  }
   if (passwordValue.length < 8) {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
   if (passwordValue.length > 256) {
     return res.status(400).json({ error: 'Password must be 256 characters or fewer' });
+  }
+
+  const hasUppercase = /[A-Z]/.test(passwordValue);
+  const hasLowercase = /[a-z]/.test(passwordValue);
+  const hasDigit = /\d/.test(passwordValue);
+  const hasSpecial = /[^A-Za-z0-9]/.test(passwordValue);
+
+  if (!hasUppercase || !hasLowercase || !hasDigit || !hasSpecial) {
+    return res.status(400).json({
+      error: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.'
+    });
   }
 
   try {

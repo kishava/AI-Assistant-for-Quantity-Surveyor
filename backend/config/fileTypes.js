@@ -25,11 +25,13 @@ export const ACCEPT_ATTRIBUTE =
 export const SUPPORTED_FORMATS_LABEL =
   'PDF, Word, Excel, CSV, RTF, TXT, and images (PNG, JPG, WEBP, TIFF, etc.)';
 
-export function isAllowedExtension(filename) {
-  const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase();
-  return ALLOWED_EXTENSIONS.includes(ext);
+export function getExtension(filePath) {
+  if (!filePath) return '';
+  const dotIndex = filePath.lastIndexOf('.');
+  return dotIndex !== -1 ? filePath.slice(dotIndex).toLowerCase() : '';
 }
 
-export function getExtension(filePath) {
-  return filePath.slice(filePath.lastIndexOf('.')).toLowerCase();
+export function isAllowedExtension(filename) {
+  const ext = getExtension(filename);
+  return ALLOWED_EXTENSIONS.includes(ext);
 }

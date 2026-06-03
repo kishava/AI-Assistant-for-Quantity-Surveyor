@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../config.js';
+import db from '../db.js';
 
 const JWT_SECRET = getJwtSecret();
 
@@ -16,7 +17,15 @@ export default function authMiddleware(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded; // { id, username }
+    
+    // Verify user exists in the database
+    const stmt = db.prepare('SELECT id, username FROM users WHERE id = ?');
+    const user = stmt.get(decoded.id);
+    if (!user) {
+      return res.status(401).json({ error: 'User account no longer exists' });
+    }
+
+    req.user = user; // { id, username }
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });

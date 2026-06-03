@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 
 import authRoutes from './routes/auth.js';
 import documentRoutes from './routes/documents.js';
@@ -37,6 +39,44 @@ const allowedOrigins = (process.env.CORS_ORIGIN || defaultAllowedOrigins.join(',
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
+
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests from this IP, please try again after 15 minutes.' }
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts, please try again after 15 minutes.' }
+});
+
+const chatLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many chat messages. Please wait before asking more questions.' }
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many file uploads. Please try again after 15 minutes.' }
+});
+
+app.use(helmet());
+app.use('/api', globalLimiter);
+app.use('/api/auth', authLimiter);
+app.use('/api/chat', chatLimiter);
+app.use('/api/documents/upload', uploadLimiter);
 
 app.use(cors({
   origin(origin, callback) {

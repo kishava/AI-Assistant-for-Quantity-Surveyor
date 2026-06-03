@@ -146,6 +146,9 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req, res) =
     });
   } catch (error) {
     console.error('Upload route error:', error);
+    if (req.file && req.file.path) {
+      await fs.promises.unlink(req.file.path).catch(() => {});
+    }
     res.status(500).json({ error: 'Failed to record document upload in database' });
   }
 });
@@ -233,7 +236,7 @@ ${documentText}`;
     }
   } catch (error) {
     console.error('BOQ extraction error:', error);
-    res.status(500).json({ error: error.message || 'Failed to extract BOQ' });
+    res.status(500).json({ error: 'Failed to extract BOQ' });
   }
 });
 

@@ -51,15 +51,37 @@ db.exec(`
     document_id UNINDEXED
   );
 
+  CREATE TABLE IF NOT EXISTS conversations (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    provider TEXT CHECK(provider IN ('local', 'groq')) NOT NULL DEFAULT 'local',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
+    conversation_id TEXT NOT NULL DEFAULT 'default',
     role TEXT CHECK(role IN ('user', 'assistant')) NOT NULL,
     content TEXT NOT NULL,
     model_used TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
   );
+`);
+
+// Migration for existing databases: add conversation_id column to messages table if not exists
+try {
+  db.exec("ALTER TABLE messages ADD COLUMN conversation_id TEXT NOT NULL DEFAULT 'default'");
+} catch (e) {
+  // Column already exists, ignore
+}
+
+// Create index after column is guaranteed to exist
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages (conversation_id);
 `);
 
 export default db;

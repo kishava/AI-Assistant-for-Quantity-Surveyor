@@ -4,7 +4,7 @@ import MessageBubble from './MessageBubble.jsx';
 import CloudConsentModal from './CloudConsentModal.jsx';
 import { consumeChatStream } from '../utils/chatStream.js';
 
-export default function ChatWindow({ token }) {
+export default function ChatWindow({ token, conversationId }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,7 +26,7 @@ export default function ChatWindow({ token }) {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const response = await fetch('/api/chat/history', {
+        const response = await fetch(`/api/chat/history?conversationId=${conversationId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response.ok) {
@@ -39,7 +39,7 @@ export default function ChatWindow({ token }) {
     };
 
     fetchHistory();
-  }, [token]);
+  }, [token, conversationId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -75,7 +75,8 @@ export default function ChatWindow({ token }) {
         body: JSON.stringify({
           message: text,
           useCloud: options.useCloud !== undefined ? options.useCloud : autoCloud,
-          forceLocal: options.forceLocal || false
+          forceLocal: options.forceLocal || false,
+          conversationId: conversationId
         })
       });
 
