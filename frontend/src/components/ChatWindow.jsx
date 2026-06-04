@@ -10,7 +10,6 @@ export default function ChatWindow({ token, user, conversationId }) {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState('');
-  const [thinkingLines, setThinkingLines] = useState([]);
   const [streaming, setStreaming] = useState(false);
   const [autoCloud, setAutoCloud] = useState(false);
   const [allowGroqDocs, setAllowGroqDocs] = useState(false);
@@ -143,7 +142,6 @@ export default function ChatWindow({ token, user, conversationId }) {
 
     setLoading(true);
     setLoadingStage('Connecting…');
-    setThinkingLines([]);
     setInputText('');
 
     const isRetry = options.useCloud || options.forceLocal;
@@ -193,23 +191,26 @@ export default function ChatWindow({ token, user, conversationId }) {
       const thinkingAccum = [];
       let assistantStarted = false;
 
+      const startAssistantBubble = () => {
+        if (assistantStarted) return;
+        assistantStarted = true;
+        setLoading(false);
+        setStreaming(true);
+        setLoadingStage('');
+        const assistantStartedAt = new Date().toISOString();
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: '',
+          thinking: [...thinkingAccum],
+          streaming: true,
+          created_at: assistantStartedAt
+        }]);
+      };
+
       await consumeChatStream(
         response,
         (tokenPart) => {
-          if (!assistantStarted) {
-            assistantStarted = true;
-            setLoading(false);
-            setStreaming(true);
-            setLoadingStage('');
-            const assistantStartedAt = new Date().toISOString();
-            setMessages(prev => [...prev, {
-              role: 'assistant',
-              content: '',
-              thinking: [...thinkingAccum],
-              streaming: true,
-              created_at: assistantStartedAt
-            }]);
-          }
+          if (!assistantStarted) startAssistantBubble();
           accumulated += tokenPart;
           setMessages(prev => {
             const updated = [...prev];
@@ -223,8 +224,9 @@ export default function ChatWindow({ token, user, conversationId }) {
         (meta) => {
           if (meta.stage) setLoadingStage(meta.stage);
           if (meta.thinking) {
-            thinkingAccum.push(meta.thinking);
-            setThinkingLines([...thinkingAccum]);
+            if (!thinkingAccum.includes(meta.thinking)) {
+              thinkingAccum.push(meta.thinking);
+            }
             setMessages(prev => {
               const updated = [...prev];
               const last = updated[updated.length - 1];
@@ -234,6 +236,9 @@ export default function ChatWindow({ token, user, conversationId }) {
               return updated;
             });
           }
+          if (meta.answerStart) {
+            startAssistantBubble();
+          }
           if (meta.model) modelUsed = meta.model;
           if (meta.citations) citations = meta.citations;
           if (meta.error) accumulated = `Error: ${meta.error}`;
@@ -241,7 +246,6 @@ export default function ChatWindow({ token, user, conversationId }) {
             setLoading(false);
             setStreaming(false);
             setLoadingStage('');
-            setThinkingLines([]);
             if (!assistantStarted && thinkingAccum.length > 0) {
               setMessages(prev => [...prev, {
                 role: 'assistant',
@@ -427,16 +431,6 @@ export default function ChatWindow({ token, user, conversationId }) {
                   <span></span>
                   <span></span>
                 </span>
-              )}
-              {thinkingLines.length > 0 && (
-                <div className="thinking-panel" role="status" aria-live="polite">
-                  <div className="thinking-panel-title">Reasoning</div>
-                  <ul className="thinking-list">
-                    {thinkingLines.map((line, i) => (
-                      <li key={i}>{line}</li>
-                    ))}
-                  </ul>
-                </div>
               )}
             </div>
           </div>

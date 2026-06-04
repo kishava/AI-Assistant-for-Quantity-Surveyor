@@ -1,5 +1,5 @@
-import React from 'react';
-import { Cpu, User, FileText } from 'lucide-react';
+import React, { useState } from 'react';
+import { Cpu, User, FileText, ChevronDown, Brain } from 'lucide-react';
 
 function formatMessageTime(iso) {
   if (!iso) return '';
@@ -17,6 +17,8 @@ function formatMessageTime(iso) {
 export default function MessageBubble({ msg }) {
   const isUser = msg.role === 'user';
   const timeLabel = formatMessageTime(msg.created_at);
+  const hasThinking = !isUser && msg.thinking && msg.thinking.length > 0;
+  const [showThinking, setShowThinking] = useState(false);
 
   const formatInline = (line) => {
     const parts = line.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g);
@@ -102,19 +104,37 @@ export default function MessageBubble({ msg }) {
         )}
       </div>
 
-      {!isUser && msg.thinking && msg.thinking.length > 0 && (
-        <details className="thinking-panel thinking-panel-inline" open={!!msg.streaming}>
-          <summary className="thinking-panel-title">Reasoning ({msg.thinking.length} steps)</summary>
-          <ul className="thinking-list">
-            {msg.thinking.map((line, i) => (
-              <li key={i}>{line}</li>
-            ))}
-          </ul>
-        </details>
+      {!isUser && hasThinking && (
+        <div className="reasoning-toolbar">
+          <button
+            type="button"
+            className={`reasoning-toggle-btn${showThinking ? ' active' : ''}`}
+            onClick={() => setShowThinking((v) => !v)}
+            aria-expanded={showThinking}
+          >
+            <Brain size={14} />
+            <span>{showThinking ? 'Hide reasoning' : 'View reasoning'}</span>
+            <span className="reasoning-count">{msg.thinking.length}</span>
+            <ChevronDown size={14} className={`reasoning-chevron${showThinking ? ' open' : ''}`} />
+          </button>
+          {showThinking && (
+            <div className="thinking-panel thinking-panel-collapsed">
+              <ul className="thinking-list">
+                {msg.thinking.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!isUser && (
+        <div className="answer-label">Answer</div>
       )}
 
       <div
-        className="message-content"
+        className={`message-content${!isUser ? ' message-content-answer' : ''}`}
         style={{
           color: msg.isError ? '#f43f5e' : 'inherit',
           borderColor: msg.isError ? 'rgba(244, 63, 94, 0.3)' : undefined

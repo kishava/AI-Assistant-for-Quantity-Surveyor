@@ -2,9 +2,13 @@ import express from 'express';
 import { randomUUID } from 'crypto';
 import db from '../db.js';
 import authMiddleware from '../middleware/auth.js';
-import { streamRouteQuery, estimateTokens } from '../services/aiRouter.js';
+import { streamRouteQuery, routeQuery, estimateTokens } from '../services/aiRouter.js';
 import { retrieveContext } from '../services/contextRetrieval.js';
-import { buildQsChatMessages } from '../services/qsPrompts.js';
+import {
+  buildCompiledAnswerMessages,
+  buildThinkingMessages,
+  splitThinkingLines,
+} from '../services/qsPrompts.js';
 
 const router = express.Router();
 const CLOUD_THRESHOLD = parseInt(process.env.CLOUD_THRESHOLD_TOKENS || '1000', 10);
@@ -72,11 +76,34 @@ router.post('/', authMiddleware, async (req, res) => {
     `);
     const history = historyStmt.all(req.user.id, activeConversationId).reverse();
 
-    const { messagesToSend, uniqueCitations } = buildQsChatMessages({
+    const garbled = retrievalMeta?.ocrQuality === 'poor';
+    const useTwoPhase =
+      contextChunks.length > 0 && !garbled && (!finalUseCloud || canSendDocsToCloud);
+
+    let analysisThinking = '';
+    const allThinkingLines = [...(retrievalMeta.thinking || [])];
+
+    if (useTwoPhase) {
+      try {
+        const { messagesToSend: thinkMsgs } = buildThinkingMessages({
+          message,
+          contextChunks,
+          retrievalMeta,
+        });
+        const thinkResult = await routeQuery(thinkMsgs, finalUseCloud, finalForceLocal);
+        analysisThinking = (thinkResult.content || '').trim();
+        allThinkingLines.push(...splitThinkingLines(analysisThinking));
+      } catch (thinkErr) {
+        console.warn('Thinking phase skipped:', thinkErr.message);
+      }
+    }
+
+    const { messagesToSend, uniqueCitations } = buildCompiledAnswerMessages({
       message,
       history,
       contextChunks,
       retrievalMeta,
+      analysisThinking,
     });
 
     const tokenCount = estimateTokens(messagesToSend.map(m => m.content).join('\n'));
@@ -90,13 +117,22 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 
     writeSsePrep(res);
+
     if (!finalUseCloud || canSendDocsToCloud) {
       writeSse(res, '[STAGE]Reading documents…');
       for (const line of retrievalMeta.thinking || []) {
         writeSse(res, `[THINKING]${line}`);
       }
+      if (useTwoPhase && analysisThinking) {
+        writeSse(res, '[STAGE]Reviewing BOQ structure…');
+        for (const line of splitThinkingLines(analysisThinking)) {
+          writeSse(res, `[THINKING]${line}`);
+        }
+      }
     }
-    writeSse(res, '[STAGE]Analyzing BOQ and drafting answer…');
+
+    writeSse(res, '[STAGE]Preparing your answer…');
+    writeSse(res, '[ANSWER_START]');
 
     let accumulated = '';
     const aiResult = await streamRouteQuery(

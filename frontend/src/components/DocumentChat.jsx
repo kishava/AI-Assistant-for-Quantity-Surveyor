@@ -58,7 +58,6 @@ export default function DocumentChat({ document, token, user, onBack }) {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState('');
-  const [thinkingLines, setThinkingLines] = useState([]);
   const [streaming, setStreaming] = useState(false);
   const [autoCloud] = useState(false);
   const [allowGroqDocs, setAllowGroqDocs] = useState(false);
@@ -89,7 +88,6 @@ export default function DocumentChat({ document, token, user, onBack }) {
 
     setLoading(true);
     setLoadingStage('Connecting…');
-    setThinkingLines([]);
     setInputText('');
 
     const isRetry = options.useCloud || options.forceLocal;

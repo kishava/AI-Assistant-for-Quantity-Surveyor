@@ -1,37 +1,71 @@
 import { isGarbledOcr } from './ocrQuality.js';
 
 const QS_SYSTEM_PROMPT =
-  'You are a Quantity Surveyor (QS) assistant used by practising QS professionals on site and in the office. ' +
-  'Write in clear, plain English. Be concise and practical — no textbook lectures, no filler, no invented data. ' +
-  'Never reference "snippets", "documents I cannot access", or generic BOQ theory when document text is provided below. ' +
-  'Use markdown: short headings, bullet lists, and tables where helpful. ' +
-  'British/Indian QS terms are fine (Cum, Sqm, PCC, BOQ).';
+  'You are a Quantity Surveyor (QS) assistant used by practising QS professionals. ' +
+  'Write in clear, plain English. Be concise and practical. Never invent BOQ figures.';
 
-const BOQ_EXPLAIN_FORMAT =
-  'Answer using ONLY the document text below. Structure your reply exactly like this:\n\n' +
+const THINKING_SYSTEM_PROMPT =
+  'You are a QS assistant performing internal document review before answering a colleague. ' +
+  'Output bullet points only (use "- "). No headings, no markdown ## sections, no final answer for the user. ' +
+  'Maximum 8 bullets, 120 words total.';
+
+const BOQ_ANSWER_FORMAT =
+  'Write ONLY the final answer for the quantity surveyor (no reasoning, no "I will", no analysis prose).\n' +
+  'Start directly with this structure:\n\n' +
   '## Document\n' +
-  '- **File:** (filename from context)\n' +
-  '- **Project / title:** (from document if visible, else "Not stated in extract")\n\n' +
+  '- **File:** (filename)\n' +
+  '- **Project / title:** (from text or "Not stated")\n\n' +
   '## In brief\n' +
-  '2–4 sentences: what this BOQ covers and the main cost areas.\n\n' +
+  '2–4 sentences on scope and main cost areas.\n\n' +
   '## Sections & line items\n' +
-  'For each major section (e.g. Earth work, Civil works):\n' +
-  '- Section name and **section total** if shown\n' +
-  '- Table or bullets: **Item** | **Description** | **Unit** | **Qty** | **Rate** | **Amount** (use "—" if missing)\n\n' +
+  'Per section (Earth work, Civil works, etc.): section total if shown; then items as ' +
+  '**Item** | **Description** | **Unit** | **Qty** | **Rate** | **Amount** (use "—" if missing).\n\n' +
   '## Totals & notes for QS\n' +
-  '- Call out section totals and anything unusual (disposal, fill, grade of concrete, etc.)\n' +
-  '- One short bullet list: what to verify on site or in drawings\n\n' +
-  'Rules: copy numbers exactly from the text; do not guess rates or quantities; if a field is unreadable, mark it "—" and say so once in notes.';
+  'Section totals, unusual items, and a short verify-on-site bullet list.\n\n' +
+  'Copy numbers exactly from the document text.';
 
-const GARBLED_RESPONSE_FORMAT =
-  'The extracted text from the uploaded file is too garbled for a reliable BOQ explanation.\n\n' +
+const GARBLED_USER_REPLY =
   'Reply in under 120 words with ONLY:\n' +
-  '1. **Problem:** OCR/scan quality is poor (do not invent line items).\n' +
-  '2. **What to do:** In Documents, click the refresh icon to **Reprocess**; use a clearer PDF/scan; ensure Ollama model `moondream` is installed for images (`ollama pull moondream`).\n' +
-  '3. **Then ask again:** e.g. "Explain this BOQ section by section."\n\n' +
-  'Do NOT write generic QS theory or pretend to explain excavation/formwork from snippets.';
+  '1. **Problem:** OCR/scan quality is poor.\n' +
+  '2. **What to do:** Reprocess in Documents (refresh icon); use a clearer PDF; `ollama pull moondream` for images.\n' +
+  '3. **Then ask again.**\n' +
+  'No generic QS theory.';
 
-export function buildQsChatMessages({ message, history, contextChunks, retrievalMeta }) {
+function docContextBlock(contextChunks, docLabel) {
+  return (
+    `Filename: "${docLabel}"\n\n` +
+    `--- DOCUMENT TEXT ---\n\n` +
+    contextChunks.map((c, i) => `### Part ${i + 1}\n${c}`).join('\n\n') +
+    '\n\n--- END DOCUMENT TEXT ---'
+  );
+}
+
+export function buildThinkingMessages({ message, contextChunks, retrievalMeta }) {
+  const docLabel = retrievalMeta?.usedDocs?.[0] || 'uploaded document';
+  const retrievalNotes = (retrievalMeta?.thinking || []).join('\n');
+
+  return {
+    messagesToSend: [
+      { role: 'system', content: THINKING_SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content:
+          `User question: ${message}\n\n` +
+          (retrievalNotes ? `System notes:\n${retrievalNotes}\n\n` : '') +
+          `${docContextBlock(contextChunks, docLabel)}\n\n` +
+          'Bullets: which BOQ sections you see; key quantities/rates spotted; anything unclear; how you will structure the compiled answer.',
+      },
+    ],
+  };
+}
+
+export function buildCompiledAnswerMessages({
+  message,
+  history,
+  contextChunks,
+  retrievalMeta,
+  analysisThinking = '',
+}) {
   const uniqueCitations = retrievalMeta?.usedDocs?.length ? [...retrievalMeta.usedDocs] : [];
   const docLabel = uniqueCitations[0] || 'uploaded document';
   const fullContext = contextChunks.join('\n\n');
@@ -41,22 +75,21 @@ export function buildQsChatMessages({ message, history, contextChunks, retrieval
 
   if (contextChunks.length === 0) {
     userContent =
-      'No document text was loaded.\n\n' +
-      'Tell the user: upload the BOQ under **Documents**, wait until status is **Ready**, optionally attach it in chat, then ask again.\n\n' +
+      'No document text was loaded. Tell the user to upload a BOQ in Documents, wait for **Ready**, then ask again.\n\n' +
       `User question: ${message}`;
   } else if (garbled) {
     userContent =
-      `${GARBLED_RESPONSE_FORMAT}\n\n` +
+      `${GARBLED_USER_REPLY}\n\n` +
       `Filename: "${docLabel}"\n\n` +
-      `--- Poor quality extract (for reference only, do not quote as facts) ---\n${fullContext.slice(0, 1200)}\n---\n\n` +
+      `--- Poor extract (do not quote as facts) ---\n${fullContext.slice(0, 800)}\n---\n\n` +
       `User question: ${message}`;
   } else {
     userContent =
-      `${BOQ_EXPLAIN_FORMAT}\n\n` +
-      `Filename: "${docLabel}"\n\n` +
-      `--- DOCUMENT TEXT (read newest upload; use only this) ---\n\n` +
-      contextChunks.map((c, i) => `### Part ${i + 1}\n${c}`).join('\n\n') +
-      `\n\n--- END DOCUMENT TEXT ---\n\n` +
+      `${BOQ_ANSWER_FORMAT}\n\n` +
+      (analysisThinking
+        ? `--- INTERNAL ANALYSIS (already done — do not repeat in your reply) ---\n${analysisThinking}\n--- END ANALYSIS ---\n\n`
+        : '') +
+      `${docContextBlock(contextChunks, docLabel)}\n\n` +
       `User question: ${message}`;
   }
 
@@ -69,4 +102,17 @@ export function buildQsChatMessages({ message, history, contextChunks, retrieval
     uniqueCitations,
     garbled,
   };
+}
+
+/** Single-phase fallback (no document or simple queries). */
+export function buildQsChatMessages(opts) {
+  return buildCompiledAnswerMessages({ ...opts, analysisThinking: '' });
+}
+
+export function splitThinkingLines(text) {
+  if (!text || typeof text !== 'string') return [];
+  return text
+    .split(/\n+/)
+    .map((l) => l.trim().replace(/^[-*•]\s*/, ''))
+    .filter((l) => l.length > 0);
 }
