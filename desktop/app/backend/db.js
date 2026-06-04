@@ -98,6 +98,22 @@ try {
   // Column already exists, ignore
 }
 
+// Migration: conversations table for installs that predate multi-chat
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS conversations (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      provider TEXT CHECK(provider IN ('local', 'groq')) NOT NULL DEFAULT 'local',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+  `);
+} catch (e) {
+  console.warn('Conversations table migration:', e.message);
+}
+
 // Create index after column is guaranteed to exist
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages (conversation_id);

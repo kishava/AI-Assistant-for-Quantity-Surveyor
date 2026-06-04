@@ -44,15 +44,45 @@ const upload = multer({
   }
 });
 
+async function indexDocumentVectors(docId, chunks, userId) {
+  const maxChunks = 40;
+  const limitedChunks = chunks.slice(0, maxChunks);
+  if (limitedChunks.length === 0) {
+    return;
+  }
+  const chunkTexts = limitedChunks.map(c => c.content);
+  const chunkObjects = chunkTexts.map((text, i) => ({
+    id: `doc_${docId}_chunk_${i}`,
+    text,
+    documentId: docId,
+    chunkIndex: i,
+    userId,
+  }));
+
+  try {
+    const embeddings = await embedBatch(chunkTexts);
+    const indexed = await storeChunks(chunkObjects, embeddings);
+    if (!indexed) {
+      console.warn(`Document ${docId}: vector search unavailable (start ChromaDB on port 8000).`);
+    }
+  } catch (vectorErr) {
+    console.warn(`Document ${docId}: vector indexing skipped:`, vectorErr.message);
+  }
+}
+
 // Background processor for parsing and chunking
 async function processDocument(docId, filePath) {
   try {
+    console.log(`[documents] Processing ID ${docId}: ${filePath}`);
     const text = await parseDocument(filePath);
     if (!text.trim()) {
-      throw new Error('Document content is empty');
+      throw new Error('Document content is empty — no text could be extracted');
     }
 
     const chunks = chunkText(text, 250, 50);
+    if (chunks.length === 0) {
+      throw new Error('Document produced no searchable chunks');
+    }
 
     const insertTransaction = db.transaction((chunksArray, id) => {
       const insertChunk = db.prepare('INSERT INTO chunks (document_id, content, page_num) VALUES (?, ?, ?)');
@@ -66,26 +96,16 @@ async function processDocument(docId, filePath) {
 
     insertTransaction(chunks, docId);
 
-    // After saving chunks to SQLite, also store in ChromaDB
     const docRow = db.prepare('SELECT user_id FROM documents WHERE id = ?').get(docId);
     const userId = docRow?.user_id;
 
-    const chunkTexts = chunks.map(c => c.content);
-    const chunkObjects = chunkTexts.map((text, i) => ({
-      id: `doc_${docId}_chunk_${i}`,
-      text,
-      documentId: docId,
-      chunkIndex: i,
-      userId
-    }));
-
-    const embeddings = await embedBatch(chunkTexts);
-    await storeChunks(chunkObjects, embeddings);
-
-    const updateStmt = db.prepare('UPDATE documents SET status = ? WHERE id = ?');
+    const updateStmt = db.prepare('UPDATE documents SET status = ?, error_message = NULL WHERE id = ?');
     updateStmt.run('ready', docId);
+    console.log(`Document ${docId} ready (${chunks.length} chunks); indexing vectors in background…`);
 
-    console.log(`Document processing completed successfully for ID: ${docId}`);
+    indexDocumentVectors(docId, chunks, userId).catch((err) => {
+      console.warn(`Document ${docId}: background vector index failed:`, err.message);
+    });
   } catch (error) {
     console.error(`Document processing failed for ID: ${docId}`, error);
     try {

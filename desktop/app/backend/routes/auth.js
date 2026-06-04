@@ -6,6 +6,7 @@ import { getJwtSecret } from '../config.js';
 import { deleteDocumentChunks } from '../services/vectorStore.js';
 import paths from '../config/paths.js';
 import fs from 'fs';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 const JWT_SECRET = getJwtSecret();
@@ -141,19 +142,21 @@ export async function deleteUserData(userId) {
       }
     }
 
-    // Delete documents (cascades to chunks)
-    db.prepare('DELETE FROM documents WHERE user_id = ?').run(userId);
-    // Delete conversations (cascades to messages)
+    // Delete chat history first, then documents (and chunks via CASCADE)
+    db.prepare('DELETE FROM messages WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM conversations WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM chunks WHERE document_id IN (SELECT id FROM documents WHERE user_id = ?)').run(userId);
+    db.prepare('DELETE FROM documents WHERE user_id = ?').run(userId);
     console.log(`[QS] Cleaned up guest data for user ID ${userId}`);
   } catch (err) {
     console.error(`Error during guest data cleanup for user ${userId}:`, err);
   }
 }
 
-// Guest Login
-router.post('/guest', (req, res) => {
+// Guest Login — always start with a clean slate (no prior guest history)
+router.post('/guest', async (req, res) => {
   try {
+    await deleteUserData(9999);
     const token = jwt.sign(
       { id: 9999, username: 'guest' },
       JWT_SECRET,
@@ -170,8 +173,11 @@ router.post('/guest', (req, res) => {
   }
 });
 
-// Guest Cleanup
-router.post('/guest-cleanup', async (req, res) => {
+// Guest Cleanup (authenticated guest only)
+router.post('/guest-cleanup', authMiddleware, async (req, res) => {
+  if (req.user.id !== 9999 || req.user.username !== 'guest') {
+    return res.status(403).json({ error: 'Only guest sessions can request guest cleanup' });
+  }
   await deleteUserData(9999);
   res.status(200).json({ message: 'Guest data cleaned up' });
 });

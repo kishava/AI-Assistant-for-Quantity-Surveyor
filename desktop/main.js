@@ -131,26 +131,69 @@ async function areDependenciesInstalled() {
   return ollama && chroma;
 }
 
-function runDependencyEnsure() {
+function updateSplashStatus(text) {
+  if (!splashWindow || splashWindow.isDestroyed()) return;
+  const safe = String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  splashWindow.webContents.executeJavaScript(
+    `document.querySelector('p').textContent = '${safe}';`
+  ).catch(() => {});
+}
+
+function runDependencyEnsure(options = {}) {
+  const { quickStart = true, timeoutMs = 45000 } = options;
   return new Promise((resolve) => {
     const scriptPath = getLauncherScriptPath('check-deps.ps1');
     if (process.platform !== 'win32' || !fs.existsSync(scriptPath)) {
       return resolve();
     }
 
-    console.log('[QS] Running dependency check (install if missing)…');
-    const proc = spawn('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy', 'Bypass',
-      '-File', scriptPath,
-      '-InstallIfMissing',
-      '-PullModels',
-      '-Quiet',
-    ], { windowsHide: true });
+    console.log('[QS] Quick dependency check…');
+    const args = [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass',
+      '-File', scriptPath, '-Quiet',
+    ];
+    if (quickStart) {
+      args.push('-QuickStart');
+    } else {
+      args.push('-InstallIfMissing', '-PullModels');
+    }
 
-    proc.on('close', () => resolve());
-    proc.on('error', () => resolve());
+    const proc = spawn('powershell.exe', args, { windowsHide: true });
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+
+    const timer = setTimeout(() => {
+      console.warn('[QS] Dependency check timed out — continuing startup.');
+      try { proc.kill(); } catch { /* ignore */ }
+      done();
+    }, timeoutMs);
+
+    proc.on('close', () => { clearTimeout(timer); done(); });
+    proc.on('error', () => { clearTimeout(timer); done(); });
   });
+}
+
+function pullModelsInBackground() {
+  const flagFile = path.join(appDataDir, 'deps-bootstrap.done');
+  if (fs.existsSync(flagFile)) return;
+
+  const scriptPath = getLauncherScriptPath('install-deps.ps1');
+  if (!fs.existsSync(scriptPath)) return;
+
+  try {
+    fs.mkdirSync(appDataDir, { recursive: true });
+    fs.writeFileSync(flagFile, new Date().toISOString());
+  } catch { /* ignore */ }
+
+  console.log('[QS] First-run setup: installing dependencies & models in background…');
+  spawn('powershell.exe', [
+    '-NoProfile', '-ExecutionPolicy', 'Bypass',
+    '-File', scriptPath, '-Silent',
+  ], { windowsHide: true, detached: true }).unref();
 }
 
 let chromaProcess = null;
@@ -183,8 +226,7 @@ async function startServicesIfNeeded() {
     } else {
       spawn('ollama', ['serve'], { detached: true, stdio: 'ignore' }).unref();
     }
-    // Wait for Ollama to spin up
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 8; i++) {
       await new Promise(r => setTimeout(r, 1000));
       if (await httpPing('http://127.0.0.1:11434/api/tags')) {
         console.log('[QS] Ollama service started.');
@@ -243,8 +285,7 @@ async function startServicesIfNeeded() {
       }
     });
 
-    // Wait for ChromaDB to spin up
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 8; i++) {
       await new Promise(r => setTimeout(r, 1000));
       if (await httpPing('http://127.0.0.1:8000/api/v2/heartbeat')) {
         console.log('[QS] ChromaDB service started.');
@@ -296,18 +337,34 @@ function startBackend() {
 
   console.log('[QS] Backend dir :', backendDir);
   console.log('[QS] Node cmd    :', nodeCmd);
-  console.log('[QS] Files in dir:', fs.existsSync(backendDir) ? fs.readdirSync(backendDir).join(', ') : 'DIR NOT FOUND');
+
+  if (app.isPackaged && nodeCmd === 'node.exe') {
+    const bundled = path.join(process.resourcesPath, 'bin', 'node.exe');
+    if (!fs.existsSync(bundled)) {
+      dialog.showErrorBox('QS Assistant',
+        'Bundled Node.js runtime is missing.\n\n' +
+        'Rebuild the portable app:\n' +
+        '  powershell -File scripts\\package-desktop.ps1\n\n' +
+        'Ensure desktop\\bin\\node.exe exists before building.');
+      app.quit();
+      return false;
+    }
+  }
 
   if (!fs.existsSync(backendDir)) {
     dialog.showErrorBox('QS Assistant', `Backend folder not found:\n${backendDir}`);
     app.quit();
-    return;
+    return false;
   }
 
-  // Determine entry point
   const entryFile = fs.existsSync(path.join(backendDir, 'start-prod.js'))
     ? 'start-prod.js'
     : 'server.js';
+  if (!fs.existsSync(path.join(backendDir, entryFile))) {
+    dialog.showErrorBox('QS Assistant', `Backend entry not found in:\n${backendDir}`);
+    app.quit();
+    return false;
+  }
 
   backendProcess = spawn(nodeCmd, [entryFile], {
     cwd: backendDir,
@@ -333,6 +390,8 @@ function startBackend() {
   backendProcess.on('exit', (code) => {
     console.log(`[QS] Backend exited with code ${code}`);
   });
+
+  return true;
 }
 
 function waitForHealth(retries = 60) {
@@ -413,25 +472,30 @@ function createTray() {
 app.whenReady().then(async () => {
   createSplashWindow();
 
-  // 1. Check dependencies every launch; install Ollama/Chroma/models if missing
-  await runDependencyEnsure();
-
-  // 2. Start required background services (Ollama and ChromaDB) if not already running
-  await startServicesIfNeeded();
-
-  // 3. Start backend
-  startBackend();
-
   try {
-    await waitForHealth();
+    updateSplashStatus('Checking services…');
+    await runDependencyEnsure({ quickStart: true, timeoutMs: 45000 });
+
+    updateSplashStatus('Starting Ollama & ChromaDB…');
+    await startServicesIfNeeded();
+
+    updateSplashStatus('Starting QS Assistant…');
+    if (!startBackend()) return;
+
+    await waitForHealth(90);
     createWindow();
     try { createTray(); } catch { /* optional */ }
+
+    // Pull models after UI is up (first-time setup can take a while)
+    pullModelsInBackground();
   } catch (err) {
     if (splashWindow) { splashWindow.close(); splashWindow = null; }
     console.error('Launch failed:', err);
     dialog.showErrorBox('QS Assistant',
       'Could not start the application.\n\n' +
-      'Please make sure Ollama is running and try again.\n\n' +
+      '1. Close any other QS Assistant instance\n' +
+      '2. Ensure port 3001 is free\n' +
+      '3. Start Ollama from the system tray\n\n' +
       `Details: ${err.message}`);
     app.quit();
   }

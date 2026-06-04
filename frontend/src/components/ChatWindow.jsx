@@ -3,6 +3,7 @@ import { Send, Sparkles, ShieldCheck, Paperclip, X, AlertCircle } from 'lucide-r
 import MessageBubble from './MessageBubble.jsx';
 import CloudConsentModal from './CloudConsentModal.jsx';
 import { consumeChatStream } from '../utils/chatStream.js';
+import { ACCEPT_ATTRIBUTE } from '../config/fileTypes.js';
 
 export default function ChatWindow({ token, user, conversationId }) {
   const [messages, setMessages] = useState([]);
@@ -86,7 +87,7 @@ export default function ChatWindow({ token, user, conversationId }) {
       }
       attempts++;
       if (attempts > 120) {
-        setAttachedFile(prev => prev && prev.id === docId ? { ...prev, status: 'failed', error_message: 'Processing timed out (large images can take several minutes)' } : prev);
+        setFileError('This file is still processing. Large scanned images can take several minutes; you can keep working and reattach it when it is ready in Documents.');
         setUploadingFile(false);
         clearInterval(interval);
       }
@@ -477,6 +478,7 @@ export default function ChatWindow({ token, user, conversationId }) {
             ref={fileInputRef}
             style={{ display: 'none' }}
             onChange={handleFileSelect}
+            accept={ACCEPT_ATTRIBUTE}
             disabled={loading || streaming || uploadingFile}
           />
           <button

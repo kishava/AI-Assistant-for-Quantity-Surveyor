@@ -47,6 +47,9 @@ const upload = multer({
 async function indexDocumentVectors(docId, chunks, userId) {
   const maxChunks = 40;
   const limitedChunks = chunks.slice(0, maxChunks);
+  if (limitedChunks.length === 0) {
+    return;
+  }
   const chunkTexts = limitedChunks.map(c => c.content);
   const chunkObjects = chunkTexts.map((text, i) => ({
     id: `doc_${docId}_chunk_${i}`,

@@ -49,9 +49,12 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 }
 
 function writeSseToken(res, token) {
-  if (token) {
-    res.write(`data: ${token}\n\n`);
+  if (!token) return;
+  const lines = String(token).split(/\r?\n/);
+  for (const line of lines) {
+    res.write(`data: ${line}\n`);
   }
+  res.write('\n');
 }
 
 async function consumeOllamaStream(response, onToken) {

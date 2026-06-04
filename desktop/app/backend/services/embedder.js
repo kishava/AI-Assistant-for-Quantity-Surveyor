@@ -19,7 +19,7 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 }
 
 export async function embedText(text) {
-  await ensureModelPulled('nomic-embed-text');
+  await ensureModelPulled('nomic-embed-text', { allowPull: false });
   const res = await fetchWithTimeout(`${OLLAMA_URL}/api/embeddings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -38,9 +38,13 @@ export async function embedText(text) {
   return data.embedding;
 }
 
-export async function embedBatch(texts) {
+export async function embedBatch(texts, maxChunks = 40) {
+  const limited = texts.slice(0, maxChunks);
+  if (texts.length > maxChunks) {
+    console.warn(`[embedder] Indexing first ${maxChunks} of ${texts.length} chunks`);
+  }
   const embeddings = [];
-  for (const text of texts) {
+  for (const text of limited) {
     const emb = await embedText(text);
     embeddings.push(emb);
   }
