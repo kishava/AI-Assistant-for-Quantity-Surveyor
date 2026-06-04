@@ -13,8 +13,10 @@
     "build": "npm run build --prefix frontend",
     "start": "npm run start --prefix backend",
     "desktop": "npm run start --prefix desktop",
-    "desktop:prep": "powershell -File scripts/package-desktop.ps1",
-    "desktop:build": "powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1"
+    "desktop:sync": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-desktop-app.ps1 -BuildFrontend",
+    "desktop:sync:fast": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-desktop-app.ps1",
+    "desktop:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-desktop.ps1",
+    "dist": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-desktop.ps1"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

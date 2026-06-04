@@ -14,10 +14,10 @@ chroma_data/
 
 coverage/
 
-# Desktop / Electron build outputs (rebuild locally — do not commit)
+# Desktop / Electron — generated from root sources (npm run desktop:sync / dist)
+desktop/app/
 desktop/release/
 desktop/bin/
-desktop/app/backend/uploads/
 
 # Packaged portable output
 dist/QS-Assistant/

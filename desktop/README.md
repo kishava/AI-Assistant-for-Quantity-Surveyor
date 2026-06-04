@@ -1,29 +1,41 @@
-# QS Assistant Desktop (Phase 2)
+# QS Assistant Desktop
 
-Electron wrapper around the QS Assistant web app.
+Electron shell — **portable** and **NSIS installer** are built together from root sources.
 
-## Prerequisites
+## Sync bundle (after code changes)
 
-- Backend dependencies installed (`cd backend && npm install`)
-- Frontend built (`cd frontend && npm run build`)
-- Ollama + ChromaDB running (same as web app)
+From repo root:
 
-## Run in development
+```powershell
+npm run desktop:sync
+```
 
-```bash
+Copies `backend/`, `frontend/dist/`, and `launcher/` into `desktop/app/` (gitignored).
+
+## Build portable + installer together
+
+```powershell
+npm run dist
+```
+
+| Output | Path |
+|--------|------|
+| Portable | `desktop\release\win-unpacked\QS Assistant.exe` |
+| Installer | `dist\installer\QS-Assistant-Setup.exe` |
+
+`commit.bat` runs sync automatically. Add `dist` as a second argument to also compile:
+
+```bat
+commit.bat "feat: my change" dist
+```
+
+## Dev: run Electron
+
+```powershell
+npm run desktop:sync
 cd desktop
 npm install
 npm start
 ```
 
-Set `QS_AI_BACKEND_DIR` if the backend is not at `../backend`.
-
-## Build Windows installer
-
-```bash
-npm run build
-```
-
-Output: `desktop/release/`
-
-Note: Add `desktop/tray-icon.png` (16x16 or 32x32) before building for system tray support.
+See [PACKAGING.md](../PACKAGING.md) for full details.

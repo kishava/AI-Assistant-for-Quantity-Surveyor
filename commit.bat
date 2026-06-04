@@ -9,6 +9,27 @@ if "%MSG%"=="" (
 
 if "%MSG%"=="" set MSG=chore: auto-commit task changes
 
+REM Keep portable + installer source bundle aligned with backend/frontend/launcher
+echo Syncing desktop portable + installer sources...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\sync-desktop-app.ps1" -BuildFrontend -Quiet
+if %ERRORLEVEL% neq 0 (
+  echo Desktop sync failed.
+  exit /b 1
+)
+
+if /i "%~2"=="dist" goto do_dist
+if /i "%~3"=="dist" goto do_dist
+goto after_dist
+
+:do_dist
+echo Building portable + installer (electron-builder)...
+call npm run dist
+if %ERRORLEVEL% neq 0 (
+  echo dist build failed.
+  exit /b 1
+)
+
+:after_dist
 git add -A
 
 git diff --cached --quiet

@@ -1,0 +1,43 @@
+---
+description: Keep Electron portable and NSIS installer in sync when changing app code
+globs:
+  - backend/**
+  - frontend/**
+  - launcher/**
+  - desktop/**
+  - scripts/**
+alwaysApply: false
+---
+
+# Desktop portable + installer (develop together)
+
+The **only** bundled app tree is `desktop\app\`. It is rebuilt from root sources — never edit `desktop\app\` by hand.
+
+| Command | When | Output |
+|---------|------|--------|
+| `npm run desktop:sync` | After backend/frontend/launcher changes (runs automatically in `commit.bat`) | Updates `desktop\app\` |
+| `npm run dist` | When user tests portable/installer or asks to package | Portable + installer together |
+
+## After code changes
+
+1. `commit.bat` runs `sync-desktop-app.ps1` automatically.
+2. If the user mentions **portable**, **installer**, **desktop**, or **distribution**, also run:
+   ```powershell
+   npm run dist
+   ```
+   This builds **both**:
+   - Portable: `desktop\release\win-unpacked\QS Assistant.exe`
+   - Installer: `dist\installer\QS-Assistant-Setup.exe`
+
+## Do not use stale paths
+
+- Do **not** rely on committed files under `desktop\app\` (gitignored).
+- Legacy `scripts\package-windows.ps1` + Inno `installer\QS-Assistant.iss` are optional; primary path is **electron-builder** (`npm run dist`).
+
+## Source of truth
+
+| Source | Copied to |
+|--------|-----------|
+| `backend\` | `desktop\app\backend\` |
+| `frontend\dist\` | `desktop\app\backend\frontend-dist\` |
+| `launcher\*.ps1` | `desktop\app\launcher\` |

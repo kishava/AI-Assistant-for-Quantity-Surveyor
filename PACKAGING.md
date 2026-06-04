@@ -1,57 +1,60 @@
 # Windows Packaging Guide
 
-## Quick start (development)
+## Development (web)
 
 ```powershell
-# Terminal 1 — ChromaDB
 chroma run --path ./chroma_data
-
-# Terminal 2 — Backend
-cd backend; npm run dev
-
-# Terminal 3 — Frontend
-cd frontend; npm run dev
+npm run dev
 ```
 
-## Production single-server
+## Keep portable + installer sources in sync
+
+Whenever you change `backend/`, `frontend/`, or `launcher/`:
 
 ```powershell
-cd frontend; npm run build
-cd backend; npm run start:prod
-# Open http://127.0.0.1:3001
+npm run desktop:sync
 ```
 
-Data is stored in `%APPDATA%\QS-AI\` (database, uploads, `.env`).
+`commit.bat` runs this automatically before each commit.
 
-## One-click launcher
+## Build portable + installer together
+
+Single command builds **both** outputs from the same `desktop\app` bundle:
 
 ```powershell
-.\QS-Assistant.bat
+npm run dist
 ```
 
-Runs dependency checks, starts the backend, opens the browser.
+| Output | Path |
+|--------|------|
+| **Portable** | `desktop\release\win-unpacked\QS Assistant.exe` |
+| **Installer** | `dist\installer\QS-Assistant-Setup.exe` |
 
-## Package for distribution
+Requires: Node.js in PATH, `npm install` in `desktop/` (for electron-builder).
+
+## Run Electron shell in dev
+
+```powershell
+npm run desktop:sync
+npm run desktop
+```
+
+## Legacy Inno Setup (optional)
+
+Older batch-based layout under `dist\QS-Assistant\`:
 
 ```powershell
 powershell -File scripts\package-windows.ps1
+# Then compile installer\QS-Assistant.iss with Inno Setup 6+
 ```
 
-Output: `dist\QS-Assistant\` — copy portable Node 20 into `dist\QS-Assistant\node\`.
+Prefer **`npm run dist`** — one pipeline for portable + NSIS installer.
 
-## Installer (Inno Setup)
+## End-user prerequisites
 
-1. Run `scripts\package-windows.ps1`
-2. Install [Inno Setup](https://jrsoftware.org/isinfo.php)
-3. Compile `installer\QS-Assistant.iss`
-4. Output: `dist\installer\QS-Assistant-Setup.exe`
+Installed automatically by the NSIS installer hook (`desktop\build\installer.nsh`):
 
-## Prerequisites for end users
+- Ollama + models: `phi3:mini`, `nomic-embed-text`, `moondream`
+- Python + ChromaDB
 
-- **Ollama**: `ollama pull phi3:mini` and `ollama pull nomic-embed-text`
-- **ChromaDB**: `pip install chromadb` then `chroma run --path ./chroma_data`
-- **Groq** (optional): set `GROQ_API_KEY` in `%APPDATA%\QS-AI\.env`
-
-## Phase 2 — Electron desktop
-
-See [desktop/README.md](desktop/README.md).
+Data directory: `%APPDATA%\QS-AI\`

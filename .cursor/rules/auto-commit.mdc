@@ -7,6 +7,7 @@ alwaysApply: true
 
 After completing **any** code change, fix, or feature — no exceptions:
 
+0. If you changed `backend/`, `frontend/`, `launcher/`, or `desktop/`: `commit.bat` syncs `desktop\app\` automatically. If the user is working on portable/installer, also run `npm run dist` to compile both.
 1. Run `commit.bat` with a short conventional message:
    ```
    commit.bat "feat: brief description of what changed"
