@@ -393,8 +393,19 @@ export default function ChatWindow({ token, user, conversationId }) {
             <MessageSquarePlaceholder />
             <h3 style={{ fontWeight: 500 }}>No messages yet</h3>
             <p style={{ fontSize: '0.85rem', maxWidth: '360px' }}>
-              Upload construction sheets, BQ cost details, or schedules in the Documents tab, then ask assistant here.
+              Upload your BOQ in Documents, wait until <strong>Ready</strong>, then use a quick prompt below.
             </p>
+            <div className="chat-quick-prompts">
+              <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Explain this BOQ section by section in plain English for a quantity surveyor.')}>
+                Explain BOQ
+              </button>
+              <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Summarise earthwork and disposal items with quantities and amounts from the document.')}>
+                Earthwork summary
+              </button>
+              <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('List concrete and formwork items with units, qty, rate and amount.')}>
+                Concrete items
+              </button>
+            </div>
           </div>
         ) : (
           messages.map((msg, index) => (

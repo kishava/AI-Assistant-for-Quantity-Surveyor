@@ -304,8 +304,16 @@ export default function DocumentChat({ document, token, user, onBack }) {
             <div className="document-chat-empty">
               <h3 style={{ fontWeight: 500 }}>Ask about this document</h3>
               <p style={{ fontSize: '0.85rem', maxWidth: '360px' }}>
-                Questions are scoped to &ldquo;{document.filename}&rdquo; using semantic search.
+                Questions use &ldquo;{document.filename}&rdquo; — newest upload is read first.
               </p>
+              <div className="chat-quick-prompts">
+                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Explain this BOQ section by section in plain English for a quantity surveyor.')}>
+                  Explain BOQ
+                </button>
+                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('What are the main sections and section totals in this tender BOQ?')}>
+                  Section totals
+                </button>
+              </div>
             </div>
           ) : (
             messages.map((msg, index) => (

@@ -201,7 +201,7 @@ router.post('/:id/extract-boq', authMiddleware, async (req, res) => {
     }
 
     const chunksStmt = db.prepare(
-      'SELECT content FROM chunks WHERE document_id = ? ORDER BY id ASC LIMIT 6'
+      'SELECT content FROM chunks WHERE document_id = ? ORDER BY id ASC LIMIT 30'
     );
     const chunkRows = chunksStmt.all(docId);
     const documentText = chunkRows.map(r => r.content).join('\n');

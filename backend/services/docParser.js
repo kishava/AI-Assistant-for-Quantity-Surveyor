@@ -10,6 +10,7 @@ import {
   TEXT_EXTENSIONS
 } from '../config/fileTypes.js';
 import { isModelAvailable } from './ollamaModelHelper.js';
+import { ocrQualityScore } from './ocrQuality.js';
 import Tesseract from 'tesseract.js';
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL || 'http://localhost:11434';
@@ -57,8 +58,10 @@ async function parseImageWithOllama(buffer) {
           {
             role: 'user',
             content:
-              'Extract all readable text from this construction document or Bill of Quantities (BOQ) image. ' +
-              'Return plain text only — preserve line breaks, item numbers, quantities, and units. No commentary.',
+              'Transcribe this Bill of Quantities (BOQ) or construction estimate table exactly.\n' +
+              'Keep section headings (e.g. EARTH WORK, CIVIL WORKS).\n' +
+              'Each row: item number, description, unit, quantity, rate, amount — one row per line.\n' +
+              'Copy all numbers and currency exactly. Plain text only, no commentary.',
             images: [base64],
           },
         ],
@@ -91,13 +94,19 @@ async function parseImage(filePath) {
     console.warn(`[docParser] Tesseract failed: ${error.message}`);
   }
 
-  if (text.length < OCR_MIN_CHARS) {
-    console.log(`[docParser] Trying Ollama vision fallback (${OLLAMA_VISION_MODEL})…`);
+  const tesseractScore = ocrQualityScore(text);
+  const shouldTryVision = text.length < OCR_MIN_CHARS || tesseractScore < 0.5;
+
+  if (shouldTryVision) {
+    console.log(`[docParser] Trying Ollama vision (Tesseract score ${tesseractScore.toFixed(2)})…`);
     try {
       const visionText = await parseImageWithOllama(buffer);
-      if (visionText.length > text.length) {
+      const visionScore = ocrQualityScore(visionText);
+      if (visionScore > tesseractScore || visionText.length > text.length * 1.1) {
         text = visionText;
-        console.log(`[docParser] Vision extracted ${text.length} characters`);
+        console.log(`[docParser] Using vision text (${text.length} chars, score ${visionScore.toFixed(2)})`);
+      } else {
+        console.log(`[docParser] Keeping Tesseract (vision score ${visionScore.toFixed(2)})`);
       }
     } catch (visionErr) {
       if (!text) {

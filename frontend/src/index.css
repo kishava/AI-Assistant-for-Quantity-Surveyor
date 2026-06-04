@@ -851,6 +851,56 @@ input, button, textarea {
   line-height: 1.45;
 }
 
+.message-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent-cyan);
+  margin: 14px 0 6px;
+}
+
+.message-subheading {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #e5e7eb;
+  margin: 10px 0 4px;
+}
+
+.message-table-row {
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #d1d5db;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.chat-quick-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.chat-quick-prompts button {
+  font-size: 0.78rem;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(6, 182, 212, 0.35);
+  background: rgba(6, 182, 212, 0.08);
+  color: #a5f3fc;
+  cursor: pointer;
+}
+
+.chat-quick-prompts button:hover:not(:disabled) {
+  background: rgba(6, 182, 212, 0.18);
+}
+
+.chat-quick-prompts button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ==========================================================================
    Sidebar Conversations List & CRUD Actions
    ========================================================================== */

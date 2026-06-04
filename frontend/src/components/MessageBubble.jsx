@@ -44,6 +44,27 @@ export default function MessageBubble({ msg }) {
 
     return content.split('\n').map((line, idx) => {
       const trimmed = line.trim();
+      if (trimmed.startsWith('## ')) {
+        return (
+          <h3 key={idx} className="message-heading">
+            {formatInline(trimmed.slice(3))}
+          </h3>
+        );
+      }
+      if (trimmed.startsWith('### ')) {
+        return (
+          <h4 key={idx} className="message-subheading">
+            {formatInline(trimmed.slice(4))}
+          </h4>
+        );
+      }
+      if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+        return (
+          <p key={idx} className="message-table-row">
+            {formatInline(trimmed)}
+          </p>
+        );
+      }
       if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
         return (
           <li key={idx} className="message-list-item">

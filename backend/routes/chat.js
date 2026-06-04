@@ -4,6 +4,7 @@ import db from '../db.js';
 import authMiddleware from '../middleware/auth.js';
 import { streamRouteQuery, estimateTokens } from '../services/aiRouter.js';
 import { retrieveContext } from '../services/contextRetrieval.js';
+import { buildQsChatMessages } from '../services/qsPrompts.js';
 
 const router = express.Router();
 const CLOUD_THRESHOLD = parseInt(process.env.CLOUD_THRESHOLD_TOKENS || '1000', 10);
@@ -22,49 +23,6 @@ function writeSsePrep(res) {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders?.();
-}
-
-function buildMessages(message, history, contextChunks, retrievalMeta) {
-  let contextHeader = '';
-  const uniqueCitations = retrievalMeta?.usedDocs?.length
-    ? [...retrievalMeta.usedDocs]
-    : [];
-
-  if (contextChunks.length > 0) {
-    const docLabel = uniqueCitations[0] || 'uploaded document';
-    contextHeader =
-      `You are analyzing the Quantity Surveying document: "${docLabel}".\n` +
-      `Use ONLY the extracted text below. Do not invent figures, project names, or sections.\n` +
-      `If OCR text looks garbled, say so and summarize only what is clearly readable.\n\n` +
-      `--- DOCUMENT TEXT (most recent upload first) ---\n\n` +
-      contextChunks.map((c, i) => `[Excerpt ${i + 1}]\n${c}`).join('\n\n---\n\n') +
-      `\n\n--- END DOCUMENT TEXT ---\n\n` +
-      `When explaining a BOQ:\n` +
-      `- Use clear headings (Earthworks, Civil works, etc.) matching the document\n` +
-      `- List item numbers, descriptions, units, quantities, rates, and amounts when present\n` +
-      `- Quote section totals exactly as written\n` +
-      `- State which document you used\n\n`;
-  } else {
-    contextHeader =
-      'No document text was retrieved. Tell the user to upload the BOQ in Documents, wait until status is Ready, then ask again.\n\n';
-  }
-
-  const messagesToSend = [
-    {
-      role: 'system',
-      content:
-        'You are an expert Quantity Surveyor (QS) AI assistant. Be accurate and structured. ' +
-        'Never fabricate BOQ line items or costs. If data is missing, say what is missing. ' +
-        'Use professional QS terminology.'
-    },
-    ...history,
-    {
-      role: 'user',
-      content: contextHeader + `User question: ${message}`
-    }
-  ];
-
-  return { messagesToSend, uniqueCitations };
 }
 
 router.post('/', authMiddleware, async (req, res) => {
@@ -114,12 +72,12 @@ router.post('/', authMiddleware, async (req, res) => {
     `);
     const history = historyStmt.all(req.user.id, activeConversationId).reverse();
 
-    const { messagesToSend, uniqueCitations } = buildMessages(
+    const { messagesToSend, uniqueCitations } = buildQsChatMessages({
       message,
       history,
       contextChunks,
-      retrievalMeta
-    );
+      retrievalMeta,
+    });
 
     const tokenCount = estimateTokens(messagesToSend.map(m => m.content).join('\n'));
     if (tokenCount >= CLOUD_THRESHOLD && !finalUseCloud && !finalForceLocal && !isGuest) {

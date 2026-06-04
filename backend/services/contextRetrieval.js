@@ -1,6 +1,7 @@
 import db from '../db.js';
 import { embedText } from './embedder.js';
 import { searchChunks } from './vectorStore.js';
+import { assessDocumentText } from './ocrQuality.js';
 
 function isBoqStyleQuery(message) {
   const q = message.toLowerCase();
@@ -49,11 +50,15 @@ function loadSequentialChunks(documentId, limit = 14) {
   return stmt.all(documentId, limit).map((r) => r.content);
 }
 
+function loadAllChunks(documentId, limit = 40) {
+  return loadSequentialChunks(documentId, limit);
+}
+
 async function loadChunksForDocument(documentId, message, topK = 8) {
   const chunks = [];
 
   if (isBoqStyleQuery(message)) {
-    chunks.push(...loadSequentialChunks(documentId, 14));
+    chunks.push(...loadAllChunks(documentId, 40));
   }
 
   try {
@@ -115,8 +120,8 @@ export async function retrieveContext(message, userId, explicitDocumentId = null
     meta.primaryDoc = doc;
     meta.usedDocs = [doc.filename];
     meta.thinking.push(`Reading attached document: ${doc.filename} (uploaded ${doc.created_at}).`);
-    const chunks = await loadChunksForDocument(doc.id, message);
-    return { chunks, meta };
+    let chunks = await loadChunksForDocument(doc.id, message);
+    return finalizeRetrieval(chunks, meta);
   }
 
   const latest = getLatestReadyDocument(userId);
@@ -150,5 +155,22 @@ export async function retrieveContext(message, userId, explicitDocumentId = null
     meta.thinking.push('Could not load text from the document. Try re-uploading a clearer PDF or image.');
   }
 
-  return { chunks: chunks.slice(0, 18), meta };
+  return finalizeRetrieval(chunks, meta);
+}
+
+function finalizeRetrieval(chunks, meta) {
+  const trimmed = chunks.slice(0, 24);
+  const joined = trimmed.join('\n\n');
+  const quality = assessDocumentText(joined);
+  meta.ocrQuality = quality.label === 'poor' ? 'poor' : 'good';
+
+  if (quality.garbled) {
+    meta.thinking.push(
+      'Scan/OCR quality looks poor — answers may be limited. Use Reprocess (refresh) on this file or upload a clearer PDF.'
+    );
+  } else {
+    meta.thinking.push(`Loaded ${trimmed.length} text section(s) from the document (readable extract).`);
+  }
+
+  return { chunks: trimmed, meta };
 }
