@@ -24,19 +24,34 @@ if ($BuildFrontend) {
 }
 
 if (-not (Test-Path $FrontendDist)) {
-    Log "  WARNING: frontend\dist missing — run: cd frontend; npm run build" "Yellow"
+    Log "  WARNING: frontend\dist missing - run: cd frontend; npm run build" "Yellow"
 }
 
 Log "Syncing desktop\app from source..." "Cyan"
 
 if (Test-Path $AppDir) {
-    Remove-Item $AppDir -Recurse -Force
+    Remove-Item -LiteralPath $AppDir -Recurse -Force -ErrorAction Stop
 }
+Start-Sleep -Milliseconds 200
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 
 $BackendDest = Join-Path $AppDir "backend"
 Log "  backend → desktop\app\backend"
-Copy-Item -Recurse $BackendSrc $BackendDest
+if (Test-Path $BackendDest) {
+    Remove-Item -LiteralPath $BackendDest -Recurse -Force -ErrorAction Stop
+}
+$robocopy = Get-Command robocopy.exe -ErrorAction SilentlyContinue
+if ($robocopy) {
+    & robocopy.exe $BackendSrc $BackendDest /E /XD node_modules uploads /XF qs_ai.db qs_ai.db-shm qs_ai.db-wal .env /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+    if ($LASTEXITCODE -ge 8) {
+        throw "robocopy backend failed (exit $LASTEXITCODE)"
+    }
+} else {
+    New-Item -ItemType Directory -Force -Path $BackendDest | Out-Null
+    Get-ChildItem -Path $BackendSrc -Force | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination $BackendDest -Recurse -Force
+    }
+}
 @("node_modules", "uploads") | ForEach-Object {
     $p = Join-Path $BackendDest $_
     if (Test-Path $p) { Remove-Item $p -Recurse -Force }
@@ -72,7 +87,13 @@ foreach ($rel in $required) {
     if (-not (Test-Path (Join-Path $AppDir $rel))) { $missing += $rel }
 }
 if ($missing.Count -gt 0) {
-    throw "Sync incomplete — missing: $($missing -join ', ')"
+    throw "Sync incomplete - missing: $($missing -join ', ')"
 }
 
-Log "  desktop\app sync OK" "Green"
+$srcSvc = (Get-ChildItem (Join-Path $BackendSrc "services") -File -ErrorAction SilentlyContinue).Count
+$dstSvc = (Get-ChildItem (Join-Path $BackendDest "services") -File -ErrorAction SilentlyContinue).Count
+if ($srcSvc -ne $dstSvc) {
+    throw "Sync incomplete - backend/services: $srcSvc source files, $dstSvc copied"
+}
+
+Log "  desktop\app sync OK ($dstSvc service modules)" "Green"
