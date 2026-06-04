@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { UploadCloud, FileText, Trash2, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { UploadCloud, FileText, Trash2, Clock, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import DocumentChat from './DocumentChat.jsx';
 import { ACCEPT_ATTRIBUTE, SUPPORTED_FORMATS_LABEL } from '../config/fileTypes.js';
 
@@ -105,7 +105,21 @@ export default function DocumentUpload({ token, user }) {
     }
   };
 
-  // Delete document handler
+  const handleReprocess = async (docId) => {
+    try {
+      const response = await fetch(`/api/documents/${docId}/reprocess`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to reprocess document');
+      setDocuments(prev => prev.map(d => d.id === docId ? { ...d, status: 'processing', error_message: null } : d));
+      fetchDocuments();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const handleDelete = async (docId) => {
     if (!window.confirm('Are you sure you want to delete this document? All associated search indexes will be removed.')) {
       return;
@@ -290,7 +304,20 @@ export default function DocumentUpload({ token, user }) {
                     <td>{formatBytes(doc.file_size)}</td>
                     <td>{renderStatus(doc.status, doc.error_message)}</td>
                     <td>{new Date(doc.created_at).toLocaleDateString()}</td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td style={{ textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                      {(doc.status === 'ready' || doc.status === 'failed') && (
+                        <button
+                          className="btn btn-secondary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReprocess(doc.id);
+                          }}
+                          style={{ padding: '6px' }}
+                          title="Re-extract text and rebuild search index"
+                        >
+                          <RefreshCw size={14} />
+                        </button>
+                      )}
                       <button
                         className="btn btn-danger"
                         onClick={(e) => {

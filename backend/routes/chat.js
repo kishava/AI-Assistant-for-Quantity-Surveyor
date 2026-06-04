@@ -3,8 +3,7 @@ import { randomUUID } from 'crypto';
 import db from '../db.js';
 import authMiddleware from '../middleware/auth.js';
 import { streamRouteQuery, estimateTokens } from '../services/aiRouter.js';
-import { embedText } from '../services/embedder.js';
-import { searchChunks } from '../services/vectorStore.js';
+import { retrieveContext } from '../services/contextRetrieval.js';
 
 const router = express.Router();
 const CLOUD_THRESHOLD = parseInt(process.env.CLOUD_THRESHOLD_TOKENS || '1000', 10);
@@ -25,81 +24,43 @@ function writeSsePrep(res) {
   res.flushHeaders?.();
 }
 
-function searchChunksFts(message, userId, documentId, topK = 5) {
-  const terms = message
-    .trim()
-    .split(/\s+/)
-    .filter((w) => w.length > 2)
-    .map((w) => `"${w.replace(/"/g, '""')}"`)
-    .join(' OR ');
-  if (!terms) return [];
-
-  try {
-    if (documentId) {
-      const stmt = db.prepare(`
-        SELECT f.content FROM chunks_fts f
-        WHERE chunks_fts MATCH ? AND f.document_id = ?
-        LIMIT ?
-      `);
-      return stmt.all(terms, documentId, topK).map((r) => r.content);
-    }
-    const stmt = db.prepare(`
-      SELECT f.content FROM chunks_fts f
-      INNER JOIN documents d ON d.id = f.document_id
-      WHERE chunks_fts MATCH ? AND d.user_id = ?
-      LIMIT ?
-    `);
-    return stmt.all(terms, userId, topK).map((r) => r.content);
-  } catch (err) {
-    console.warn('FTS search skipped:', err.message);
-    return [];
-  }
-}
-
-async function retrieveContext(message, userId, documentId) {
-  try {
-    const queryEmbedding = await embedText(message);
-    const vectorResults = await searchChunks(
-      queryEmbedding,
-      5,
-      documentId || null,
-      documentId ? null : userId
-    );
-    if (vectorResults.length > 0) return vectorResults;
-  } catch (err) {
-    console.warn('Vector search skipped:', err.message);
-  }
-
-  return searchChunksFts(message, userId, documentId || null);
-}
-
-function buildMessages(message, history, contextChunks, documentId, userId) {
+function buildMessages(message, history, contextChunks, retrievalMeta) {
   let contextHeader = '';
-  let uniqueCitations = [];
+  const uniqueCitations = retrievalMeta?.usedDocs?.length
+    ? [...retrievalMeta.usedDocs]
+    : [];
 
   if (contextChunks.length > 0) {
-    if (documentId) {
-      const docStmt = db.prepare('SELECT filename FROM documents WHERE id = ? AND user_id = ?');
-      const doc = docStmt.get(documentId, userId);
-      if (doc) uniqueCitations = [doc.filename];
-    } else {
-      uniqueCitations = ['Uploaded documents'];
-    }
-
-    contextHeader = `Here are snippets from the uploaded documents that match the query:\n\n` +
-      contextChunks.map(c => `"${c}"`).join('\n\n') +
-      `\n\nInstructions: Answer the question using the snippets. Refer to the specific documents when citing answers. If you cannot find the answer in the snippets, answer based on general Quantity Surveying (QS) principles but explicitly note that the information was not in the uploaded documents.\n\n`;
+    const docLabel = uniqueCitations[0] || 'uploaded document';
+    contextHeader =
+      `You are analyzing the Quantity Surveying document: "${docLabel}".\n` +
+      `Use ONLY the extracted text below. Do not invent figures, project names, or sections.\n` +
+      `If OCR text looks garbled, say so and summarize only what is clearly readable.\n\n` +
+      `--- DOCUMENT TEXT (most recent upload first) ---\n\n` +
+      contextChunks.map((c, i) => `[Excerpt ${i + 1}]\n${c}`).join('\n\n---\n\n') +
+      `\n\n--- END DOCUMENT TEXT ---\n\n` +
+      `When explaining a BOQ:\n` +
+      `- Use clear headings (Earthworks, Civil works, etc.) matching the document\n` +
+      `- List item numbers, descriptions, units, quantities, rates, and amounts when present\n` +
+      `- Quote section totals exactly as written\n` +
+      `- State which document you used\n\n`;
+  } else {
+    contextHeader =
+      'No document text was retrieved. Tell the user to upload the BOQ in Documents, wait until status is Ready, then ask again.\n\n';
   }
 
   const messagesToSend = [
     {
       role: 'system',
-      content: 'You are an expert Quantity Surveyor (QS) AI assistant. Provide professional, detailed estimates, calculations, cost-benefit descriptions, or specifications. Keep explanations precise and clear.'
+      content:
+        'You are an expert Quantity Surveyor (QS) AI assistant. Be accurate and structured. ' +
+        'Never fabricate BOQ line items or costs. If data is missing, say what is missing. ' +
+        'Use professional QS terminology.'
     },
     ...history,
     {
       role: 'user',
-      content: contextHeader + `Question: ${message}`
+      content: contextHeader + `User question: ${message}`
     }
   ];
 
@@ -137,10 +98,13 @@ router.post('/', authMiddleware, async (req, res) => {
       }
     }
 
-    // Only retrieve document chunks if NOT using cloud or if cloud doc reading is allowed
     let contextChunks = [];
+    let retrievalMeta = { usedDocs: [], thinking: [] };
+
     if (!finalUseCloud || canSendDocsToCloud) {
-      contextChunks = await retrieveContext(message, req.user.id, documentId || null);
+      const retrieved = await retrieveContext(message, req.user.id, documentId || null);
+      contextChunks = retrieved.chunks;
+      retrievalMeta = retrieved.meta;
     }
 
     const historyStmt = db.prepare(`
@@ -154,8 +118,7 @@ router.post('/', authMiddleware, async (req, res) => {
       message,
       history,
       contextChunks,
-      documentId || null,
-      req.user.id
+      retrievalMeta
     );
 
     const tokenCount = estimateTokens(messagesToSend.map(m => m.content).join('\n'));
@@ -169,7 +132,13 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 
     writeSsePrep(res);
-    writeSse(res, '[STAGE]Generating answer…');
+    if (!finalUseCloud || canSendDocsToCloud) {
+      writeSse(res, '[STAGE]Reading documents…');
+      for (const line of retrievalMeta.thinking || []) {
+        writeSse(res, `[THINKING]${line}`);
+      }
+    }
+    writeSse(res, '[STAGE]Analyzing BOQ and drafting answer…');
 
     let accumulated = '';
     const aiResult = await streamRouteQuery(

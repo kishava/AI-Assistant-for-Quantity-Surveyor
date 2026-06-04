@@ -81,6 +81,17 @@ export default function MessageBubble({ msg }) {
         )}
       </div>
 
+      {!isUser && msg.thinking && msg.thinking.length > 0 && (
+        <details className="thinking-panel thinking-panel-inline" open={!!msg.streaming}>
+          <summary className="thinking-panel-title">Reasoning ({msg.thinking.length} steps)</summary>
+          <ul className="thinking-list">
+            {msg.thinking.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       <div
         className="message-content"
         style={{

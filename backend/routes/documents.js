@@ -261,6 +261,47 @@ ${documentText}`;
   }
 });
 
+// Re-chunk and re-index an existing upload (e.g. after chunker/OCR improvements)
+router.post('/:id/reprocess', authMiddleware, async (req, res) => {
+  const docId = req.params.id;
+
+  try {
+    const doc = db.prepare(
+      'SELECT id, file_path, filename FROM documents WHERE id = ? AND user_id = ?'
+    ).get(docId, req.user.id);
+
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found or access denied' });
+    }
+
+    if (!fs.existsSync(doc.file_path)) {
+      return res.status(400).json({ error: 'Original file is missing on disk. Please upload again.' });
+    }
+
+    db.prepare('DELETE FROM chunks WHERE document_id = ?').run(docId);
+    db.prepare('DELETE FROM chunks_fts WHERE document_id = ?').run(docId);
+
+    try {
+      await deleteDocumentChunks(docId);
+    } catch (chromaErr) {
+      console.warn(`Reprocess: could not clear vector chunks for ${docId}:`, chromaErr.message);
+    }
+
+    db.prepare('UPDATE documents SET status = ?, error_message = NULL WHERE id = ?').run('processing', docId);
+
+    res.status(202).json({
+      message: `Reprocessing "${doc.filename}" with updated text extraction.`,
+      document_id: docId,
+      status: 'processing'
+    });
+
+    processDocument(docId, doc.file_path);
+  } catch (error) {
+    console.error('Reprocess document error:', error);
+    res.status(500).json({ error: 'Failed to reprocess document' });
+  }
+});
+
 // Delete document endpoint
 router.delete('/:id', authMiddleware, async (req, res) => {
   const docId = req.params.id;
@@ -273,8 +314,8 @@ router.delete('/:id', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Document not found or access denied' });
     }
 
-    const deleteFts = db.prepare('DELETE FROM chunks_fts WHERE document_id = ?');
-    deleteFts.run(docId);
+    db.prepare('DELETE FROM chunks WHERE document_id = ?').run(docId);
+    db.prepare('DELETE FROM chunks_fts WHERE document_id = ?').run(docId);
 
     const deleteDoc = db.prepare('DELETE FROM documents WHERE id = ? AND user_id = ?');
     deleteDoc.run(docId, req.user.id);

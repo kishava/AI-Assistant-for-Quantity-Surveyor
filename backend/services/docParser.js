@@ -31,7 +31,7 @@ async function runTesseract(buffer) {
   const result = await withTimeout(
     Tesseract.recognize(buffer, 'eng', {
       logger: () => {},
-      tessedit_pageseg_mode: Tesseract.PSM?.AUTO ?? '3',
+      tessedit_pageseg_mode: Tesseract.PSM?.SINGLE_BLOCK ?? '6',
     }),
     OCR_TIMEOUT_MS,
     'Image OCR (Tesseract)'

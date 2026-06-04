@@ -1,50 +1,74 @@
 /**
- * Splits a larger text block into manageable chunks.
- * Attempts to preserve sentence boundaries and includes a specified overlap.
- * 
- * @param {string} text - The input text to chunk.
- * @param {number} maxWords - Maximum number of words per chunk.
- * @param {number} overlapWords - Number of words to overlap between consecutive chunks.
- * @returns {Array<{content: string}>} - Array of chunks.
+ * Splits text into chunks for RAG. Preserves line breaks for BOQ/tables.
  */
 export function chunkText(text, maxWords = 250, overlapWords = 50) {
   if (!text || typeof text !== 'string') return [];
 
-  // Normalize whitespace
-  const normalizedText = text.replace(/\s+/g, ' ').trim();
-  
-  // Split into sentences using a regex that keeps the punctuation
-  // Matches periods, question marks, and exclamation marks, followed by space or end of string
+  const trimmed = text.replace(/\r\n/g, '\n').trim();
+  if (!trimmed) return [];
+
+  const lines = trimmed.split('\n').map((l) => l.trim()).filter(Boolean);
+  const looksTabular = lines.length >= 8 && lines.some((l) => /\d+[\d,.]*\s*$/.test(l) || /^(sr\.?\s*no|description|qty|rate|amount)/i.test(l));
+
+  if (looksTabular) {
+    return chunkByLines(lines, maxWords, overlapWords);
+  }
+
+  return chunkBySentences(trimmed, maxWords, overlapWords);
+}
+
+function chunkByLines(lines, maxWords, overlapWords) {
+  const chunks = [];
+  let batch = [];
+  let wordCount = 0;
+
+  for (const line of lines) {
+    const lineWords = line.split(/\s+/).filter(Boolean).length;
+    if (wordCount + lineWords > maxWords && batch.length > 0) {
+      chunks.push({ content: batch.join('\n') });
+      const flat = batch.join(' ').split(/\s+/).filter(Boolean);
+      const overlap = flat.slice(-Math.min(overlapWords, flat.length)).join(' ');
+      batch = overlap ? [overlap] : [];
+      wordCount = overlap ? overlap.split(/\s+/).length : 0;
+    }
+    batch.push(line);
+    wordCount += lineWords;
+  }
+
+  if (batch.length > 0) {
+    chunks.push({ content: batch.join('\n') });
+  }
+
+  return chunks;
+}
+
+function chunkBySentences(text, maxWords, overlapWords) {
+  const normalizedText = text.replace(/[ \t]+/g, ' ').replace(/\n{2,}/g, '\n').trim();
   const sentenceRegex = /[^.!?]+[.!?]+(\s|$)/g;
   let sentences = normalizedText.match(sentenceRegex);
 
-  // Fallback if regex returns null (e.g. no punctuation or single long word sequence)
   if (!sentences) {
-    sentences = normalizedText.split(' ').filter(Boolean).map(word => word + ' ');
+    sentences = normalizedText.split(' ').filter(Boolean).map((word) => `${word} `);
   }
 
   const chunks = [];
   let currentChunkWords = [];
   let currentWordCount = 0;
 
-  for (let i = 0; i < sentences.length; i++) {
-    const sentence = sentences[i].trim();
-    if (!sentence) continue;
+  for (const sentence of sentences) {
+    const trimmed = sentence.trim();
+    if (!trimmed) continue;
 
-    const sentenceWords = sentence.split(' ').filter(Boolean);
+    const sentenceWords = trimmed.split(' ').filter(Boolean);
     const sentenceWordCount = sentenceWords.length;
 
-    // If a single sentence exceeds the maxWords on its own, we split it by words
     if (sentenceWordCount > maxWords) {
-      // If we have some content in current chunk, save it first
       if (currentChunkWords.length > 0) {
         chunks.push({ content: currentChunkWords.join(' ') });
         currentChunkWords = [];
         currentWordCount = 0;
       }
-      
-      // Chunk the massive sentence by words
-      for (let j = 0; j < sentenceWords.length; j += (maxWords - overlapWords)) {
+      for (let j = 0; j < sentenceWords.length; j += Math.max(1, maxWords - overlapWords)) {
         const wordSlice = sentenceWords.slice(j, j + maxWords);
         if (wordSlice.length > 0) {
           chunks.push({ content: wordSlice.join(' ') });
@@ -54,27 +78,20 @@ export function chunkText(text, maxWords = 250, overlapWords = 50) {
     }
 
     if (currentWordCount + sentenceWordCount > maxWords) {
-      // Save current chunk
       chunks.push({ content: currentChunkWords.join(' ') });
-
-      // Create overlap: take last overlapWords from current chunk
-      const allWords = currentChunkWords.flatMap(s => s.split(' '));
+      const allWords = currentChunkWords.join(' ').split(' ').filter(Boolean);
       const overlapSlice = allWords.slice(-overlapWords);
-      
-      currentChunkWords = [overlapSlice.join(' '), sentence];
+      currentChunkWords = overlapSlice.length ? [overlapSlice.join(' '), trimmed] : [trimmed];
       currentWordCount = overlapSlice.length + sentenceWordCount;
     } else {
-      currentChunkWords.push(sentence);
+      currentChunkWords.push(trimmed);
       currentWordCount += sentenceWordCount;
     }
   }
 
-  // Push remaining text if any exists
   if (currentChunkWords.length > 0) {
     const remainingText = currentChunkWords.join(' ').trim();
-    if (remainingText) {
-      chunks.push({ content: remainingText });
-    }
+    if (remainingText) chunks.push({ content: remainingText });
   }
 
   return chunks;

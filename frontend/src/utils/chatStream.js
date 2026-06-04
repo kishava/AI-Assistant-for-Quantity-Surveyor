@@ -40,6 +40,8 @@ export async function consumeChatStream(response, onToken, onMeta) {
         onMeta({ error: payload.slice(7) });
       } else if (payload.startsWith('[STAGE]')) {
         onMeta({ stage: payload.slice(7) });
+      } else if (payload.startsWith('[THINKING]')) {
+        onMeta({ thinking: payload.slice(10) });
       } else {
         onToken(payload);
       }

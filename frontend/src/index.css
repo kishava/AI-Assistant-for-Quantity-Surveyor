@@ -811,6 +811,46 @@ input, button, textarea {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
+.thinking-panel {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(6, 182, 212, 0.08);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+  font-size: 0.82rem;
+  color: #a5f3fc;
+}
+
+.thinking-panel-inline {
+  margin-bottom: 10px;
+}
+
+.thinking-panel-title {
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-cyan);
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+
+.thinking-panel-inline .thinking-panel-title {
+  margin-bottom: 0;
+  list-style: none;
+}
+
+.thinking-list {
+  margin: 8px 0 0;
+  padding-left: 1.1rem;
+  color: #cbd5e1;
+}
+
+.thinking-list li {
+  margin-bottom: 4px;
+  line-height: 1.45;
+}
+
 /* ==========================================================================
    Sidebar Conversations List & CRUD Actions
    ========================================================================== */

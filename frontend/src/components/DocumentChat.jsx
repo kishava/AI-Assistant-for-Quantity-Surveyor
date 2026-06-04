@@ -58,6 +58,7 @@ export default function DocumentChat({ document, token, user, onBack }) {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState('');
+  const [thinkingLines, setThinkingLines] = useState([]);
   const [streaming, setStreaming] = useState(false);
   const [autoCloud] = useState(false);
   const [allowGroqDocs, setAllowGroqDocs] = useState(false);
@@ -88,6 +89,7 @@ export default function DocumentChat({ document, token, user, onBack }) {
 
     setLoading(true);
     setLoadingStage('Connecting…');
+    setThinkingLines([]);
     setInputText('');
 
     const isRetry = options.useCloud || options.forceLocal;
@@ -128,19 +130,29 @@ export default function DocumentChat({ document, token, user, onBack }) {
         }
       }
 
-      setLoading(false);
-      setStreaming(true);
-      setLoadingStage('');
-      const assistantStartedAt = new Date().toISOString();
-      setMessages(prev => [...prev, { role: 'assistant', content: '', streaming: true, created_at: assistantStartedAt }]);
-
       let accumulated = '';
       let modelUsed = '';
       let citations = [];
+      const thinkingAccum = [];
+      let assistantStarted = false;
 
       await consumeChatStream(
         response,
         (tokenPart) => {
+          if (!assistantStarted) {
+            assistantStarted = true;
+            setLoading(false);
+            setStreaming(true);
+            setLoadingStage('');
+            const assistantStartedAt = new Date().toISOString();
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: '',
+              thinking: [...thinkingAccum],
+              streaming: true,
+              created_at: assistantStartedAt
+            }]);
+          }
           accumulated += tokenPart;
           setMessages(prev => {
             const updated = [...prev];
@@ -153,28 +165,55 @@ export default function DocumentChat({ document, token, user, onBack }) {
         },
         (meta) => {
           if (meta.stage) setLoadingStage(meta.stage);
-          if (meta.model) modelUsed = meta.model;
-          if (meta.citations) citations = meta.citations;
-          if (meta.error) accumulated = `Error: ${meta.error}`;
-          if (meta.done) {
-            setStreaming(false);
-            setLoadingStage('');
+          if (meta.thinking) {
+            thinkingAccum.push(meta.thinking);
+            setThinkingLines([...thinkingAccum]);
             setMessages(prev => {
               const updated = [...prev];
               const last = updated[updated.length - 1];
               if (last?.role === 'assistant') {
-                updated[updated.length - 1] = {
-                  ...last,
-                  role: 'assistant',
-                  content: accumulated,
-                  model_used: modelUsed,
-                  citations,
-                  streaming: false,
-                  created_at: last.created_at || new Date().toISOString()
-                };
+                updated[updated.length - 1] = { ...last, thinking: [...thinkingAccum] };
               }
               return updated;
             });
+          }
+          if (meta.model) modelUsed = meta.model;
+          if (meta.citations) citations = meta.citations;
+          if (meta.error) accumulated = `Error: ${meta.error}`;
+          if (meta.done) {
+            setLoading(false);
+            setStreaming(false);
+            setLoadingStage('');
+            setThinkingLines([]);
+            if (!assistantStarted && thinkingAccum.length > 0) {
+              setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: accumulated || 'No response generated.',
+                thinking: [...thinkingAccum],
+                model_used: modelUsed,
+                citations,
+                streaming: false,
+                created_at: new Date().toISOString()
+              }]);
+            } else {
+              setMessages(prev => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                if (last?.role === 'assistant') {
+                  updated[updated.length - 1] = {
+                    ...last,
+                    role: 'assistant',
+                    content: accumulated,
+                    thinking: thinkingAccum.length ? [...thinkingAccum] : last.thinking,
+                    model_used: modelUsed,
+                    citations,
+                    streaming: false,
+                    created_at: last.created_at || new Date().toISOString()
+                  };
+                }
+                return updated;
+              });
+            }
           }
         }
       );
@@ -286,6 +325,16 @@ export default function DocumentChat({ document, token, user, onBack }) {
                   <span className="pulse-dots">
                     <span></span><span></span><span></span>
                   </span>
+                )}
+                {thinkingLines.length > 0 && (
+                  <div className="thinking-panel" role="status" aria-live="polite">
+                    <div className="thinking-panel-title">Reasoning</div>
+                    <ul className="thinking-list">
+                      {thinkingLines.map((line, i) => (
+                        <li key={i}>{line}</li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
             </div>
