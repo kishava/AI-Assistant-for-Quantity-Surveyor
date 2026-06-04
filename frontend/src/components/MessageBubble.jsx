@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Cpu, User, FileText, ChevronDown, Brain } from 'lucide-react';
+import { parseMarkdownBlocks } from '../utils/parseMarkdownTables.js';
+import QsDataTable from './QsDataTable.jsx';
 
 function formatMessageTime(iso) {
   if (!iso) return '';
@@ -41,9 +43,7 @@ export default function MessageBubble({ msg }) {
     });
   };
 
-  const formatContent = (content) => {
-    if (!content) return '';
-
+  const formatTextBlock = (content) => {
     return content.split('\n').map((line, idx) => {
       const trimmed = line.trim();
       if (trimmed.startsWith('## ')) {
@@ -60,13 +60,6 @@ export default function MessageBubble({ msg }) {
           </h4>
         );
       }
-      if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
-        return (
-          <p key={idx} className="message-table-row">
-            {formatInline(trimmed)}
-          </p>
-        );
-      }
       if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
         return (
           <li key={idx} className="message-list-item">
@@ -80,6 +73,24 @@ export default function MessageBubble({ msg }) {
           {formatInline(line)}
         </p>
       );
+    });
+  };
+
+  const formatContent = (content) => {
+    if (!content) return '';
+
+    const blocks = parseMarkdownBlocks(content);
+    return blocks.map((block, bi) => {
+      if (block.type === 'table') {
+        return (
+          <QsDataTable
+            key={`tbl-${bi}`}
+            columns={block.columns}
+            rows={block.rows}
+          />
+        );
+      }
+      return <div key={`txt-${bi}`}>{formatTextBlock(block.content)}</div>;
     });
   };
 
@@ -137,7 +148,7 @@ export default function MessageBubble({ msg }) {
         className={`message-content${!isUser && msg.content?.trim() ? ' message-content-answer' : ''}`}
         style={{
           color: msg.isError ? '#f43f5e' : 'inherit',
-          borderColor: msg.isError ? 'rgba(244, 63, 94, 0.3)' : undefined
+          borderColor: msg.isError ? 'rgba(244, 63, 94, 0.3)' : undefined,
         }}
       >
         {msg.content?.trim() ? formatContent(msg.content) : (

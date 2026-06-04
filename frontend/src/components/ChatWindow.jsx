@@ -4,6 +4,7 @@ import MessageBubble from './MessageBubble.jsx';
 import AssistantProgress from './AssistantProgress.jsx';
 import CloudConsentModal from './CloudConsentModal.jsx';
 import { consumeChatStream } from '../utils/chatStream.js';
+import QsOutputPanel from './QsOutputPanel.jsx';
 import { ACCEPT_ATTRIBUTE } from '../config/fileTypes.js';
 
 export default function ChatWindow({ token, user, conversationId }) {
@@ -374,6 +375,13 @@ export default function ChatWindow({ token, user, conversationId }) {
           </div>
         </div>
       </div>
+
+      <QsOutputPanel
+        token={token}
+        documentId={attachedFile?.status === 'ready' ? attachedFile.id : undefined}
+        documentLabel={attachedFile?.status === 'ready' ? attachedFile.filename : undefined}
+        disabled={loading || streaming || uploadingFile}
+      />
 
       <div className="chat-messages">
         {messages.length === 0 && !loading ? (

@@ -18,8 +18,10 @@ const BOQ_ANSWER_FORMAT =
   '## In brief\n' +
   '2–4 sentences on scope and main cost areas.\n\n' +
   '## Sections & line items\n' +
-  'Per section (Earth work, Civil works, etc.): section total if shown; then items as ' +
-  '**Item** | **Description** | **Unit** | **Qty** | **Rate** | **Amount** (use "—" if missing).\n\n' +
+  'Per section (Earth work, Civil works, etc.): section total if shown; then a markdown pipe table per section:\n' +
+  '| Item | Description | Unit | Qty | Rate | Amount |\n' +
+  '| --- | --- | --- | --- | --- | --- |\n' +
+  '(use "—" for missing cells).\n\n' +
   '## Totals & notes for QS\n' +
   'Section totals, unusual items, and a short verify-on-site bullet list.\n\n' +
   'Copy numbers exactly from the document text.';

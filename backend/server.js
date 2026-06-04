@@ -10,6 +10,7 @@ import { rateLimit } from 'express-rate-limit';
 import authRoutes, { deleteUserData } from './routes/auth.js';
 import documentRoutes from './routes/documents.js';
 import chatRoutes from './routes/chat.js';
+import qsOutputsRoutes from './routes/qsOutputs.js';
 import paths, { ensureDataDirs } from './config/paths.js';
 import { getSystemHealth } from './services/healthCheck.js';
 
@@ -105,6 +106,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/qs-outputs', qsOutputsRoutes);
 
 app.get('/api/health', async (req, res) => {
   try {

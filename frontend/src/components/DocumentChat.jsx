@@ -3,68 +3,16 @@ import { ArrowLeft, Send } from 'lucide-react';
 import MessageBubble from './MessageBubble.jsx';
 import AssistantProgress from './AssistantProgress.jsx';
 import CloudConsentModal from './CloudConsentModal.jsx';
+import QsOutputPanel from './QsOutputPanel.jsx';
 import { consumeChatStream } from '../utils/chatStream.js';
-
-function formatCell(value) {
-  if (value === null || value === undefined || value === '') {
-    return <span className="boq-null">—</span>;
-  }
-  return value;
-}
-
-function BoqTable({ items }) {
-  const totalAmount = items.reduce((sum, item) => {
-    const amt = typeof item.amount === 'number' ? item.amount : 0;
-    return sum + amt;
-  }, 0);
-
-  return (
-    <div className="boq-table-wrapper">
-      <table className="boq-table">
-        <thead>
-          <tr>
-            <th>Item No.</th>
-            <th>Description</th>
-            <th>Unit</th>
-            <th>Qty</th>
-            <th>Rate</th>
-            <th>Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item, idx) => (
-            <tr key={idx}>
-              <td>{formatCell(item.item_no)}</td>
-              <td>{formatCell(item.description)}</td>
-              <td>{formatCell(item.unit)}</td>
-              <td>{formatCell(item.quantity)}</td>
-              <td>{formatCell(item.rate)}</td>
-              <td>{formatCell(item.amount)}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="boq-totals-row">
-            <td colSpan={5}>Total</td>
-            <td>{totalAmount > 0 ? totalAmount.toFixed(2) : <span className="boq-null">—</span>}</td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  );
-}
 
 export default function DocumentChat({ document, token, user, onBack }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
-  const [loadingStage, setLoadingStage] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [autoCloud] = useState(false);
   const [allowGroqDocs, setAllowGroqDocs] = useState(false);
-  const [boqItems, setBoqItems] = useState(null);
-  const [boqLoading, setBoqLoading] = useState(false);
-  const [boqError, setBoqError] = useState('');
 
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [pendingMessage, setPendingMessage] = useState(null);
@@ -222,31 +170,6 @@ export default function DocumentChat({ document, token, user, onBack }) {
     }
   };
 
-  const handleExtractBoq = async () => {
-    setBoqLoading(true);
-    setBoqError('');
-    setBoqItems(null);
-
-    try {
-      const response = await fetch(`/api/documents/${document.id}/extract-boq`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to extract BOQ');
-      if (data.error) {
-        setBoqError(data.error);
-      } else {
-        setBoqItems(data.items);
-      }
-    } catch (err) {
-      setBoqError(err.message);
-    } finally {
-      setBoqLoading(false);
-    }
-  };
-
   const handleConsentConfirm = () => {
     setShowConsentModal(false);
     if (pendingMessage) handleSendMessage(pendingMessage, { useCloud: true });
@@ -283,10 +206,14 @@ export default function DocumentChat({ document, token, user, onBack }) {
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Document-scoped chat</p>
           </div>
         </div>
-        <button className="btn btn-cyan" onClick={handleExtractBoq} disabled={boqLoading}>
-          Extract BOQ
-        </button>
       </div>
+
+      <QsOutputPanel
+        token={token}
+        documentId={document.id}
+        documentLabel={document.filename}
+        disabled={loading || streaming}
+      />
 
       <div className="chat-container document-chat-body">
         <div className="chat-messages">
@@ -294,7 +221,7 @@ export default function DocumentChat({ document, token, user, onBack }) {
             <div className="document-chat-empty">
               <h3 style={{ fontWeight: 500 }}>Ask about this document</h3>
               <p style={{ fontSize: '0.85rem', maxWidth: '360px' }}>
-                Questions use &ldquo;{document.filename}&rdquo; — newest upload is read first.
+                Use <strong>Generate QS tables</strong> above for BOQ lines, section summaries, measurement schedules, and checklists.
               </p>
               <div className="chat-quick-prompts">
                 <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Explain this BOQ section by section in plain English for a quantity surveyor.')}>
@@ -354,16 +281,6 @@ export default function DocumentChat({ document, token, user, onBack }) {
           </div>
         )}
       </div>
-
-      {boqLoading && (
-        <div className="boq-loading">
-          <span className="boq-loading-text">Extracting BOQ…</span>
-        </div>
-      )}
-
-      {boqError && <div className="boq-error">{boqError}</div>}
-
-      {boqItems && boqItems.length > 0 && <BoqTable items={boqItems} />}
 
       {showConsentModal && (
         <CloudConsentModal
