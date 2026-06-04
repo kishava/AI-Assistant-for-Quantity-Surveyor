@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Send } from 'lucide-react';
-import MessageBubble from './MessageBubble.jsx';
+import { ArrowLeft } from 'lucide-react';
+import ChatMessage from './ChatMessage.jsx';
+import ChatComposer from './ChatComposer.jsx';
 import AssistantProgress from './AssistantProgress.jsx';
 import CloudConsentModal from './CloudConsentModal.jsx';
 import QsOutputPanel from './QsOutputPanel.jsx';
@@ -194,8 +195,8 @@ export default function DocumentChat({ document, token, user, onBack }) {
   };
 
   return (
-    <div className="document-chat-panel">
-      <div className="document-chat-header">
+    <div className="document-chat-panel chat-layout">
+      <header className="document-chat-header chat-topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button className="btn btn-secondary" onClick={onBack} style={{ padding: '8px 12px' }}>
             <ArrowLeft size={16} />
@@ -215,15 +216,16 @@ export default function DocumentChat({ document, token, user, onBack }) {
         disabled={loading || streaming}
       />
 
-      <div className="chat-container document-chat-body">
-        <div className="chat-messages">
+      <div className="document-chat-layout" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <main className="chat-thread">
+          <div className="chat-thread-inner">
           {messages.length === 0 && !loading ? (
-            <div className="document-chat-empty">
-              <h3 style={{ fontWeight: 500 }}>Ask about this document</h3>
-              <p style={{ fontSize: '0.85rem', maxWidth: '360px' }}>
+            <div className="chat-welcome">
+              <h3>Ask about this document</h3>
+              <p>
                 Use <strong>Generate QS tables</strong> above for BOQ lines, section summaries, measurement schedules, and checklists.
               </p>
-              <div className="chat-quick-prompts">
+              <div className="chat-suggestions">
                 <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Explain this BOQ section by section in plain English for a quantity surveyor.')}>
                   Explain BOQ
                 </button>
@@ -233,53 +235,42 @@ export default function DocumentChat({ document, token, user, onBack }) {
               </div>
             </div>
           ) : (
-            messages.map((msg, index) => (
-              <div key={index} className="message-with-cursor">
-                {msg.role === 'assistant' && msg.working && !msg.content?.trim() ? (
-                  <AssistantProgress msg={msg} />
-                ) : (
-                  <MessageBubble msg={msg} />
-                )}
-                {msg.streaming && msg.content?.trim() && <span className="streaming-cursor">|</span>}
-              </div>
-            ))
+            messages.map((msg, index) =>
+              msg.role === 'assistant' && msg.working && !msg.content?.trim() ? (
+                <AssistantProgress key={index} msg={msg} />
+              ) : (
+                <ChatMessage key={index} msg={msg} />
+              )
+            )
           )}
           <div ref={messagesEndRef} />
-        </div>
-
-        <div className="chat-input-wrapper">
-          <textarea
-            ref={textareaRef}
-            className="chat-input"
-            placeholder="Ask about quantities, specifications, or costs in this document..."
-            rows="1"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={loading || streaming}
-          />
-          <button
-            className="btn btn-primary"
-            onClick={() => handleSendMessage(inputText)}
-            disabled={!inputText.trim() || loading || streaming}
-            style={{ padding: '8px 12px', borderRadius: '8px' }}
-          >
-            <Send size={16} />
-          </button>
-        </div>
-        {user?.username !== 'guest' && (
-          <div style={{ marginTop: '8px', paddingLeft: '4px' }}>
-            <label style={{ fontSize: '0.8rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={allowGroqDocs}
-                onChange={(e) => setAllowGroqDocs(e.target.checked)}
-                style={{ cursor: 'pointer' }}
-              />
-              Allow Groq Cloud to read document contents
-            </label>
           </div>
-        )}
+        </main>
+
+        <footer className="chat-composer-area">
+          <div className="chat-composer-wrap">
+            <ChatComposer
+              textareaRef={textareaRef}
+              inputText={inputText}
+              onInputChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onSend={() => handleSendMessage(inputText)}
+              showAttach={false}
+              sendDisabled={!inputText.trim() || loading || streaming}
+              placeholder="Ask about this document…"
+            />
+            {user?.username !== 'guest' && (
+              <label className="chat-cloud-opt">
+                <input
+                  type="checkbox"
+                  checked={allowGroqDocs}
+                  onChange={(e) => setAllowGroqDocs(e.target.checked)}
+                />
+                Allow Groq Cloud to read document contents
+              </label>
+            )}
+          </div>
+        </footer>
       </div>
 
       {showConsentModal && (

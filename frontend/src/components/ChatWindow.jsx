@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Sparkles, ShieldCheck, Paperclip, X, AlertCircle } from 'lucide-react';
-import MessageBubble from './MessageBubble.jsx';
+import { Sparkles, ShieldCheck, Paperclip, X, AlertCircle } from 'lucide-react';
+import ChatMessage from './ChatMessage.jsx';
 import AssistantProgress from './AssistantProgress.jsx';
+import ChatComposer from './ChatComposer.jsx';
 import CloudConsentModal from './CloudConsentModal.jsx';
 import { consumeChatStream } from '../utils/chatStream.js';
 import QsOutputPanel from './QsOutputPanel.jsx';
@@ -317,14 +318,13 @@ export default function ChatWindow({ token, user, conversationId }) {
   };
 
   return (
-    <div className="chat-container">
-      <div className="chat-header">
-        <div>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: 600 }}>QS Workspace</h2>
-          <p style={{ fontSize: '0.8rem', color: '#9ca3af' }}>Query local specs and structural documents</p>
+    <div className="chat-layout">
+      <header className="chat-topbar">
+        <div className="chat-topbar-title">
+          <h2>QS Assistant</h2>
+          <p>Ask about BOQs, quantities, and specifications</p>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div className="chat-topbar-actions">
           <label style={{ 
             fontSize: '0.8rem', 
             color: user?.username === 'guest' ? '#4b5563' : '#9ca3af', 
@@ -374,61 +374,51 @@ export default function ChatWindow({ token, user, conversationId }) {
             {user?.username === 'guest' ? 'Offline Only (Guest)' : (autoCloud ? 'Cloud via Groq' : 'Offline (Ollama)')}
           </div>
         </div>
-      </div>
+      </header>
 
-      <QsOutputPanel
-        token={token}
-        documentId={attachedFile?.status === 'ready' ? attachedFile.id : undefined}
-        documentLabel={attachedFile?.status === 'ready' ? attachedFile.filename : undefined}
-        disabled={loading || streaming || uploadingFile}
-      />
-
-      <div className="chat-messages">
-        {messages.length === 0 && !loading ? (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%',
-            opacity: 0.6,
-            textAlign: 'center',
-            gap: '12px',
-            padding: '40px'
-          }}>
-            <MessageSquarePlaceholder />
-            <h3 style={{ fontWeight: 500 }}>No messages yet</h3>
-            <p style={{ fontSize: '0.85rem', maxWidth: '360px' }}>
-              Upload your BOQ in Documents, wait until <strong>Ready</strong>, then use a quick prompt below.
-            </p>
-            <div className="chat-quick-prompts">
-              <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Explain this BOQ section by section in plain English for a quantity surveyor.')}>
-                Explain BOQ
-              </button>
-              <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Summarise earthwork and disposal items with quantities and amounts from the document.')}>
-                Earthwork summary
-              </button>
-              <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('List concrete and formwork items with units, qty, rate and amount.')}>
-                Concrete items
-              </button>
+      <main className="chat-thread">
+        <div className="chat-thread-inner">
+          {messages.length === 0 ? (
+            <div className="chat-welcome">
+              <div className="chat-welcome-icon">
+                <MessageSquarePlaceholder />
+              </div>
+              <h3>How can I help with your BOQ today?</h3>
+              <p>Upload a document in <strong>Documents</strong>, attach it here, or try a suggestion below.</p>
+              <div className="chat-suggestions">
+                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Explain this BOQ section by section in plain English for a quantity surveyor.')}>
+                  Explain this BOQ
+                </button>
+                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Summarise earthwork and disposal with quantities and amounts.')}>
+                  Earthwork summary
+                </button>
+                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('List concrete items with unit, qty, rate and amount.')}>
+                  Concrete &amp; formwork
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          messages.map((msg, index) => (
-            <div key={index} className="message-with-cursor">
-              {msg.role === 'assistant' && msg.working && !msg.content?.trim() ? (
-                <AssistantProgress msg={msg} />
+          ) : (
+            messages.map((msg, index) =>
+              msg.role === 'assistant' && msg.working && !msg.content?.trim() ? (
+                <AssistantProgress key={index} msg={msg} />
               ) : (
-                <MessageBubble msg={msg} />
-              )}
-              {msg.streaming && msg.content?.trim() && <span className="streaming-cursor">|</span>}
-            </div>
-          ))
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+                <ChatMessage key={index} msg={msg} />
+              )
+            )
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      </main>
 
-      <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+      <footer className="chat-composer-area">
+        <div className="chat-composer-wrap">
+          <QsOutputPanel
+            token={token}
+            documentId={attachedFile?.status === 'ready' ? attachedFile.id : undefined}
+            documentLabel={attachedFile?.status === 'ready' ? attachedFile.filename : undefined}
+            disabled={loading || streaming || uploadingFile}
+          />
+          <div className="chat-composer-extras">
         {fileError && !attachedFile && (
           <div className="chat-file-error" role="alert">
             <AlertCircle size={14} />
@@ -516,47 +506,32 @@ export default function ChatWindow({ token, user, conversationId }) {
           </div>
         )}
 
-        <div className="chat-input-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input
-            type="file"
-            ref={fileInputRef}
-            style={{ display: 'none' }}
-            onChange={handleFileSelect}
-            accept={ACCEPT_ATTRIBUTE}
-            disabled={loading || streaming || uploadingFile}
-          />
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={loading || streaming || uploadingFile}
-            style={{ padding: '8px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            title="Attach a file to this chat query"
-          >
-            <Paperclip size={16} />
-          </button>
-
-          <textarea
-            ref={textareaRef}
-            className="chat-input"
-            placeholder={uploadingFile ? "Uploading and processing file..." : "Ask about materials, cost estimations, drawing numbers, or specifications..."}
-            rows="1"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={loading || streaming || uploadingFile}
-            style={{ flex: 1 }}
-          />
-          <button
-            className="btn btn-primary"
-            onClick={() => handleSendMessage(inputText)}
-            disabled={!inputText.trim() || loading || streaming || uploadingFile}
-            style={{ padding: '8px 12px', borderRadius: '8px' }}
-          >
-            <Send size={16} />
-          </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden-file-input"
+              onChange={handleFileSelect}
+              accept={ACCEPT_ATTRIBUTE}
+              disabled={loading || streaming || uploadingFile}
+            />
+            <ChatComposer
+              textareaRef={textareaRef}
+              inputText={inputText}
+              onInputChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onSend={() => handleSendMessage(inputText)}
+              onAttach={() => fileInputRef.current?.click()}
+              attachDisabled={loading || streaming || uploadingFile}
+              sendDisabled={!inputText.trim() || loading || streaming || uploadingFile}
+              placeholder={
+                uploadingFile
+                  ? 'Uploading and processing file…'
+                  : 'Message QS Assistant…'
+              }
+            />
+          </div>
         </div>
-      </div>
+      </footer>
 
       {showConsentModal && (
         <CloudConsentModal
