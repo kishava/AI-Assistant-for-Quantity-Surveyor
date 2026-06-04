@@ -825,6 +825,65 @@ input, button, textarea {
   margin-bottom: 10px;
 }
 
+.reasoning-toolbar {
+  margin-bottom: 8px;
+}
+
+.reasoning-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  border-radius: 8px;
+  border: 1px solid rgba(6, 182, 212, 0.35);
+  background: rgba(6, 182, 212, 0.06);
+  color: #a5f3fc;
+  cursor: pointer;
+}
+
+.reasoning-toggle-btn:hover,
+.reasoning-toggle-btn.active {
+  background: rgba(6, 182, 212, 0.16);
+  border-color: rgba(6, 182, 212, 0.55);
+}
+
+.reasoning-count {
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(6, 182, 212, 0.2);
+  color: #e0f2fe;
+}
+
+.reasoning-chevron {
+  transition: transform 0.2s ease;
+}
+
+.reasoning-chevron.open {
+  transform: rotate(180deg);
+}
+
+.thinking-panel-collapsed {
+  margin-top: 8px;
+}
+
+.answer-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6ee7b7;
+  margin-bottom: 6px;
+}
+
+.message-content-answer {
+  background: rgba(16, 185, 129, 0.04);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
 .thinking-panel-title {
   font-weight: 600;
   font-size: 0.75rem;
