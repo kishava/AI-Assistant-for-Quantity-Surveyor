@@ -70,7 +70,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app-root-container">
+    <div className="app-container app-root-container">
       {token && user ? (
         <Dashboard token={token} user={user} onLogout={handleLogout} />
       ) : (

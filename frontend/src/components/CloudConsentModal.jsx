@@ -1,91 +1,67 @@
-import React from 'react';
-import { ShieldAlert, Cpu, CloudLightning } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { ShieldAlert, CloudLightning, Cpu } from 'lucide-react';
 
 export default function CloudConsentModal({ onConfirm, onDecline, onCancel, tokenCount, threshold }) {
+  const dialogRef = useRef(null);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', onKey);
+    dialogRef.current?.focus();
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
   return (
-    <div className="modal-overlay">
-      <div className="modal-content glass-panel">
-        
-        {/* Header Icon */}
+    <div className="modal-overlay" role="presentation" onClick={onCancel}>
+      <div
+        ref={dialogRef}
+        className="modal-content glass-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="consent-dialog-title"
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            background: 'rgba(244, 63, 94, 0.15)',
-            border: '1px solid rgba(244, 63, 94, 0.3)',
-            borderRadius: '12px',
-            padding: '10px',
-            display: 'inline-flex',
-            color: '#f43f5e'
-          }}>
+          <div className="consent-icon-wrap">
             <ShieldAlert size={28} />
           </div>
           <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Data Delegation Warning</h2>
-            <p style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '2px' }}>Large query context detected</p>
+            <h2 id="consent-dialog-title" style={{ fontSize: '1.25rem', fontWeight: 700 }}>
+              Use cloud AI for this question?
+            </h2>
+            <p style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '2px' }}>
+              Your question is large — faster on cloud, but text leaves this device
+            </p>
           </div>
         </div>
 
-        {/* Token warning summary */}
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.02)',
-          border: '1px solid var(--glass-border)',
-          borderRadius: '8px',
-          padding: '14px 18px',
-          fontSize: '0.85rem',
-          lineHeight: 1.5,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: '#9ca3af' }}>Current Prompt Size:</span>
-            <strong style={{ color: '#f43f5e' }}>~{tokenCount} tokens</strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: '#9ca3af' }}>Local Threshold Limit:</span>
-            <strong>{threshold} tokens</strong>
-          </div>
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: '4px', paddingTop: '8px', color: '#9ca3af' }}>
-            Processing this query locally might be slow or hit token limits. Running via cloud-based AI (Groq) is recommended, but **your document snippets will leave this local device**.
-          </div>
+        <div className="consent-summary-box">
+          <p>
+            <strong>What stays local:</strong> Your files remain on this computer unless you also enable
+            &quot;Share document text with cloud&quot;.
+          </p>
+          <p>
+            <strong>What may go to cloud:</strong> Your question and relevant document excerpts used to
+            answer it (~{tokenCount || 'many'} words of context; local limit ~{threshold}).
+          </p>
         </div>
 
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-          {/* Option 1: Groq Cloud */}
-          <button 
-            className="btn btn-primary"
-            onClick={onConfirm}
-            style={{ 
-              width: '100%', 
-              justifyContent: 'center', 
-              padding: '12px', 
-              background: 'linear-gradient(135deg, #6366f1, #4f46e5)'
-            }}
-          >
+        <div className="consent-actions">
+          <button type="button" className="btn btn-primary consent-btn-primary" onClick={onConfirm}>
             <CloudLightning size={16} />
-            <span>Yes, route to Cloud (Groq)</span>
+            <span>Use cloud (faster)</span>
           </button>
-
-          {/* Option 2: Ollama Local force */}
-          <button 
-            className="btn btn-cyan"
-            onClick={onDecline}
-            style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
-          >
+          <button type="button" className="btn btn-cyan" onClick={onDecline} style={{ width: '100%', justifyContent: 'center', padding: '12px' }}>
             <Cpu size={16} />
-            <span>No, process locally (Ollama)</span>
+            <span>Keep on this device (local AI)</span>
           </button>
-
-          {/* Option 3: Cancel */}
-          <button 
-            className="btn btn-secondary"
-            onClick={onCancel}
-            style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
-          >
-            <span>Cancel Query</span>
+          <button type="button" className="btn btn-secondary" onClick={onCancel} style={{ width: '100%', justifyContent: 'center', padding: '12px' }}>
+            Cancel
           </button>
         </div>
-
       </div>
     </div>
   );

@@ -125,8 +125,18 @@ function parseBoqJson(aiResponse) {
   return JSON.parse(cleaned);
 }
 
+function handleUploadMulter(req, res, next) {
+  upload.single('file')(req, res, (err) => {
+    if (!err) return next();
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'File is too large. Maximum upload size is 20 MB.' });
+    }
+    return res.status(400).json({ error: err.message || 'Upload failed. Check the file type and size.' });
+  });
+}
+
 // Upload endpoint
-router.post('/upload', authMiddleware, upload.single('file'), async (req, res) => {
+router.post('/upload', authMiddleware, handleUploadMulter, async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }

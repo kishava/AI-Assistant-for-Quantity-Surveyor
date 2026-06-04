@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { UploadCloud, FileText, Trash2, Clock, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import DocumentChat from './DocumentChat.jsx';
 import { ACCEPT_ATTRIBUTE, SUPPORTED_FORMATS_LABEL } from '../config/fileTypes.js';
+import { friendlyDocError } from '../utils/userMessages.js';
 
 export default function DocumentUpload({ token, user }) {
   const [documents, setDocuments] = useState([]);
@@ -9,6 +10,7 @@ export default function DocumentUpload({ token, user }) {
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState('');
+  const [listError, setListError] = useState('');
   
   const fileInputRef = useRef(null);
 
@@ -23,9 +25,13 @@ export default function DocumentUpload({ token, user }) {
       if (response.ok) {
         const data = await response.json();
         setDocuments(data);
+        setListError('');
+      } else {
+        setListError('Could not load your documents.');
       }
     } catch (err) {
       console.error('Failed to load documents:', err);
+      setListError('Could not load documents. Check that QS Assistant is running.');
     }
   }, [token]);
 
@@ -173,10 +179,13 @@ export default function DocumentUpload({ token, user }) {
         );
       case 'failed':
         return (
-          <span className="badge badge-failed" title={errorMsg || 'Unknown parsing error'}>
-            <AlertCircle size={12} style={{ marginRight: '4px' }} />
-            Failed
-          </span>
+          <div className="doc-status-failed">
+            <span className="badge badge-failed">
+              <AlertCircle size={12} style={{ marginRight: '4px' }} />
+              Failed
+            </span>
+            <span className="doc-fail-reason">{friendlyDocError(errorMsg)}</span>
+          </div>
         );
       default:
         return status;
@@ -264,8 +273,12 @@ export default function DocumentUpload({ token, user }) {
       <div className="glass-panel" style={{ padding: '20px' }}>
         <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <FileText size={18} />
-          <span>Uploaded Files ({documents.length})</span>
+          <span>Your files ({documents.length})</span>
         </h3>
+
+        {listError && (
+          <div className="chat-inline-alert" role="alert" style={{ marginBottom: '12px' }}>{listError}</div>
+        )}
 
         {documents.length === 0 ? (
           <div style={{
@@ -274,7 +287,7 @@ export default function DocumentUpload({ token, user }) {
             color: '#6b7280',
             fontSize: '0.85rem'
           }}>
-            No documents uploaded yet. Add files above to construct your local RAG knowledge base.
+            No documents yet. Drop a BOQ, PDF, spreadsheet, or site photo above — files stay on this device and power chat search.
           </div>
         ) : (
           <div className="table-wrapper">
@@ -314,6 +327,7 @@ export default function DocumentUpload({ token, user }) {
                           }}
                           style={{ padding: '6px' }}
                           title="Re-extract text and rebuild search index"
+                          aria-label="Reprocess document"
                         >
                           <RefreshCw size={14} />
                         </button>
@@ -325,7 +339,8 @@ export default function DocumentUpload({ token, user }) {
                           handleDelete(doc.id);
                         }}
                         style={{ padding: '6px' }}
-                        title="Delete Document"
+                        title="Delete document"
+                        aria-label="Delete document"
                       >
                         <Trash2 size={14} />
                       </button>

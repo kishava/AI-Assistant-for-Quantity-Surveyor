@@ -6,6 +6,7 @@ import AssistantProgress from './AssistantProgress.jsx';
 import CloudConsentModal from './CloudConsentModal.jsx';
 import QsOutputPanel from './QsOutputPanel.jsx';
 import { consumeChatStream } from '../utils/chatStream.js';
+import { patchLastAssistant, replaceWorkingWithError } from '../utils/chatHelpers.js';
 
 export default function DocumentChat({ document, token, user, onBack }) {
   const [messages, setMessages] = useState([]);
@@ -18,6 +19,7 @@ export default function DocumentChat({ document, token, user, onBack }) {
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [pendingMessage, setPendingMessage] = useState(null);
   const [pendingTokenInfo, setPendingTokenInfo] = useState({ tokenCount: 0, threshold: 1000 });
+  const pendingMessageRef = useRef(null);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -82,10 +84,12 @@ export default function DocumentChat({ document, token, user, onBack }) {
           throw new Error(data.error || 'Server error occurred');
         }
         if (data.consentRequired) {
+          pendingMessageRef.current = text;
           setPendingMessage(text);
           setPendingTokenInfo({ tokenCount: data.tokenCount, threshold: data.threshold });
           setShowConsentModal(true);
-          setLoading(false);
+          setMessages((prev) => prev.filter((m) => !m.working));
+          setStreaming(false);
           return;
         }
       }
@@ -94,16 +98,7 @@ export default function DocumentChat({ document, token, user, onBack }) {
       let modelUsed = '';
       let citations = [];
       const thinkingAccum = [];
-
-      const patchAssistant = (patch) => {
-        setMessages((prev) => {
-          const updated = [...prev];
-          const idx = updated.findLastIndex((m) => m.role === 'assistant');
-          if (idx === -1) return prev;
-          updated[idx] = { ...updated[idx], ...patch };
-          return updated;
-        });
-      };
+      const patchAssistant = (patch) => patchLastAssistant(setMessages, patch);
 
       await consumeChatStream(
         response,
@@ -119,15 +114,17 @@ export default function DocumentChat({ document, token, user, onBack }) {
         (meta) => {
           if (meta.consentRequired) {
             setStreaming(false);
+            pendingMessageRef.current = text;
             setPendingMessage(text);
             setPendingTokenInfo({
-              tokenCount: meta.consentRequired.tokenCount,
-              threshold: meta.consentRequired.threshold,
+              tokenCount: meta.consentRequired?.tokenCount ?? 0,
+              threshold: meta.consentRequired?.threshold ?? 1000,
             });
             setShowConsentModal(true);
             setMessages((prev) => prev.filter((m) => !m.working));
             return;
           }
+          if (meta.notice) patchAssistant({ notice: meta.notice });
           if (meta.stage) patchAssistant({ stage: meta.stage, working: true });
           if (meta.thinking) {
             if (!thinkingAccum.includes(meta.thinking)) thinkingAccum.push(meta.thinking);
@@ -136,55 +133,68 @@ export default function DocumentChat({ document, token, user, onBack }) {
           if (meta.answerStart) {
             patchAssistant({ answerPhase: 'compiling', stage: 'Writing your answer…', working: true });
           }
+          if (meta.replace) {
+            accumulated = meta.replace;
+            patchAssistant({ content: accumulated, working: false, streaming: true });
+          }
           if (meta.model) modelUsed = meta.model;
           if (meta.citations) citations = meta.citations;
           if (meta.error) {
-            accumulated = `Error: ${meta.error}`;
-            patchAssistant({ content: accumulated, working: false, isError: true });
+            accumulated = meta.error;
+            patchAssistant({ content: accumulated, working: false, isError: true, streaming: false });
           }
           if (meta.done) {
             setStreaming(false);
+            const empty = !accumulated?.trim();
             patchAssistant({
-              content: accumulated || 'No response generated.',
+              content: empty
+                ? 'No answer was generated. Check sidebar status and try again.'
+                : accumulated,
               thinking: thinkingAccum.length ? [...thinkingAccum] : undefined,
               model_used: modelUsed,
               citations,
               streaming: false,
               working: false,
               answerPhase: undefined,
+              ...(empty ? { isError: true } : {}),
             });
           }
         }
       );
     } catch (error) {
       console.error('Send message failed:', error);
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Error: ${error.message}. Please verify the backend is running and Ollama config is correct.`,
-        isError: true,
-        created_at: new Date().toISOString()
-      }]);
+      replaceWorkingWithError(setMessages, error.message);
     } finally {
       setLoading(false);
       setStreaming(false);
-      setPendingMessage(null);
     }
   };
 
   const handleConsentConfirm = () => {
+    const msg = pendingMessageRef.current || pendingMessage;
+    pendingMessageRef.current = null;
+    setPendingMessage(null);
     setShowConsentModal(false);
-    if (pendingMessage) handleSendMessage(pendingMessage, { useCloud: true });
+    if (msg) handleSendMessage(msg, { useCloud: true });
   };
 
   const handleConsentDecline = () => {
+    const msg = pendingMessageRef.current || pendingMessage;
+    pendingMessageRef.current = null;
+    setPendingMessage(null);
     setShowConsentModal(false);
-    if (pendingMessage) handleSendMessage(pendingMessage, { forceLocal: true });
+    if (msg) handleSendMessage(msg, { forceLocal: true });
   };
 
   const handleConsentCancel = () => {
     setShowConsentModal(false);
-    setMessages(prev => prev.slice(0, -1));
+    pendingMessageRef.current = null;
     setPendingMessage(null);
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last?.role === 'user') return prev.slice(0, -1);
+      return prev.filter((m) => !m.working);
+    });
   };
 
   const handleKeyDown = (e) => {
@@ -198,13 +208,13 @@ export default function DocumentChat({ document, token, user, onBack }) {
     <div className="document-chat-panel chat-layout">
       <header className="document-chat-header chat-topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button className="btn btn-secondary" onClick={onBack} style={{ padding: '8px 12px' }}>
+          <button type="button" className="btn btn-secondary" onClick={onBack} style={{ padding: '8px 12px' }} aria-label="Back to documents">
             <ArrowLeft size={16} />
             Back
           </button>
           <div>
             <h2 style={{ fontSize: '1.2rem', fontWeight: 600 }}>{document.filename}</h2>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Document-scoped chat</p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Questions use this file only</p>
           </div>
         </div>
       </header>
@@ -223,10 +233,10 @@ export default function DocumentChat({ document, token, user, onBack }) {
             <div className="chat-welcome">
               <h3>Ask about this document</h3>
               <p>
-                Use <strong>Generate QS tables</strong> above for BOQ lines, section summaries, measurement schedules, and checklists.
+                Use <strong>Generate QS tables</strong> above for BOQ lines, section summaries, and measurement schedules.
               </p>
               <div className="chat-suggestions">
-                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Explain this BOQ section by section in plain English for a quantity surveyor.')}>
+                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Explain this BOQ section by section with headings and bullet points.')}>
                   Explain BOQ
                 </button>
                 <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('What are the main sections and section totals in this tender BOQ?')}>
@@ -266,7 +276,7 @@ export default function DocumentChat({ document, token, user, onBack }) {
                   checked={allowGroqDocs}
                   onChange={(e) => setAllowGroqDocs(e.target.checked)}
                 />
-                Allow Groq Cloud to read document contents
+                Share document text with cloud AI
               </label>
             )}
           </div>

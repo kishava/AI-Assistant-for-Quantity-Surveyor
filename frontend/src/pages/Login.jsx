@@ -112,7 +112,7 @@ export default function Login({ onAuthSuccess }) {
 
         {/* Error message */}
         {error && (
-          <div style={{
+          <div role="alert" aria-live="polite" style={{
             background: 'rgba(244, 63, 94, 0.1)',
             border: '1px solid rgba(244, 63, 94, 0.2)',
             color: '#f43f5e',
@@ -205,6 +205,7 @@ export default function Login({ onAuthSuccess }) {
           <button
             type="button"
             onClick={handleGuestLogin}
+            aria-busy={loading}
             style={{
               background: 'none',
               border: 'none',
@@ -217,8 +218,11 @@ export default function Login({ onAuthSuccess }) {
             }}
             disabled={loading}
           >
-            Continue as Guest
+            {loading ? 'Starting guest session…' : 'Continue as Guest'}
           </button>
+          <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '10px', lineHeight: 1.45 }}>
+            Guest mode: local AI only, no cloud. Chat and uploads are cleared when you close the app.
+          </p>
         </div>
 
       </div>

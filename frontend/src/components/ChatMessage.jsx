@@ -40,6 +40,9 @@ export default function ChatMessage({ msg }) {
           QS
         </div>
         <div className="chat-msg-body">
+          {msg.notice && (
+            <p className="chat-system-notice" role="status">{msg.notice}</p>
+          )}
           {hasThinking && (
             <ThinkingBlock
               steps={msg.thinking}
@@ -52,7 +55,7 @@ export default function ChatMessage({ msg }) {
             {msg.content?.trim() ? (
               <MessageContent content={msg.content} />
             ) : msg.streaming ? (
-              <span className="chat-typing-indicator">
+              <span className="chat-typing-indicator" aria-label="Assistant is typing">
                 <span /><span /><span />
               </span>
             ) : null}

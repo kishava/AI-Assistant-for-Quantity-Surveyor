@@ -5,8 +5,10 @@ import AssistantProgress from './AssistantProgress.jsx';
 import ChatComposer from './ChatComposer.jsx';
 import CloudConsentModal from './CloudConsentModal.jsx';
 import { consumeChatStream } from '../utils/chatStream.js';
+import { patchLastAssistant, replaceWorkingWithError } from '../utils/chatHelpers.js';
 import QsOutputPanel from './QsOutputPanel.jsx';
 import { ACCEPT_ATTRIBUTE } from '../config/fileTypes.js';
+import { friendlyDocError } from '../utils/userMessages.js';
 
 export default function ChatWindow({ token, user, conversationId }) {
   const [messages, setMessages] = useState([]);
@@ -24,10 +26,13 @@ export default function ChatWindow({ token, user, conversationId }) {
   const [attachedFile, setAttachedFile] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [fileError, setFileError] = useState('');
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState('');
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+  const pendingMessageRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -35,6 +40,8 @@ export default function ChatWindow({ token, user, conversationId }) {
 
   useEffect(() => {
     const fetchHistory = async () => {
+      setHistoryLoading(true);
+      setHistoryError('');
       try {
         const response = await fetch(`/api/chat/history?conversationId=${conversationId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -42,9 +49,15 @@ export default function ChatWindow({ token, user, conversationId }) {
         if (response.ok) {
           const data = await response.json();
           setMessages(data);
+        } else {
+          const data = await response.json().catch(() => ({}));
+          setHistoryError(data.error || 'Could not load this chat history.');
         }
       } catch (err) {
         console.error('Failed to load chat history:', err);
+        setHistoryError('Could not load chat history. Check that QS Assistant is running.');
+      } finally {
+        setHistoryLoading(false);
       }
     };
 
@@ -196,10 +209,12 @@ export default function ChatWindow({ token, user, conversationId }) {
         }
 
         if (data.consentRequired) {
+          pendingMessageRef.current = text;
           setPendingMessage(text);
           setPendingTokenInfo({ tokenCount: data.tokenCount, threshold: data.threshold });
           setShowConsentModal(true);
-          setLoading(false);
+          setMessages((prev) => prev.filter((m) => !m.working));
+          setStreaming(false);
           return;
         }
       }
@@ -209,15 +224,7 @@ export default function ChatWindow({ token, user, conversationId }) {
       let citations = [];
       const thinkingAccum = [];
 
-      const patchAssistant = (patch) => {
-        setMessages((prev) => {
-          const updated = [...prev];
-          const idx = updated.findLastIndex((m) => m.role === 'assistant');
-          if (idx === -1) return prev;
-          updated[idx] = { ...updated[idx], ...patch };
-          return updated;
-        });
-      };
+      const patchAssistant = (patch) => patchLastAssistant(setMessages, patch);
 
       await consumeChatStream(
         response,
@@ -233,14 +240,18 @@ export default function ChatWindow({ token, user, conversationId }) {
         (meta) => {
           if (meta.consentRequired) {
             setStreaming(false);
+            pendingMessageRef.current = text;
             setPendingMessage(text);
             setPendingTokenInfo({
-              tokenCount: meta.consentRequired.tokenCount,
-              threshold: meta.consentRequired.threshold,
+              tokenCount: meta.consentRequired?.tokenCount ?? 0,
+              threshold: meta.consentRequired?.threshold ?? 1000,
             });
             setShowConsentModal(true);
             setMessages((prev) => prev.filter((m) => !m.working));
             return;
+          }
+          if (meta.notice) {
+            patchAssistant({ notice: meta.notice });
           }
           if (meta.stage) {
             patchAssistant({ stage: meta.stage, working: true });
@@ -265,19 +276,23 @@ export default function ChatWindow({ token, user, conversationId }) {
           if (meta.model) modelUsed = meta.model;
           if (meta.citations) citations = meta.citations;
           if (meta.error) {
-            accumulated = `Error: ${meta.error}`;
-            patchAssistant({ content: accumulated, working: false, isError: true });
+            accumulated = meta.error;
+            patchAssistant({ content: accumulated, working: false, isError: true, streaming: false });
           }
           if (meta.done) {
             setStreaming(false);
+            const empty = !accumulated?.trim();
             patchAssistant({
-              content: accumulated || 'No response generated.',
+              content: empty
+                ? 'No answer was generated. Check sidebar status (local AI) and try again.'
+                : accumulated,
               thinking: thinkingAccum.length ? [...thinkingAccum] : undefined,
               model_used: modelUsed,
               citations,
               streaming: false,
               working: false,
               answerPhase: undefined,
+              ...(empty ? { isError: true } : {}),
             });
           }
         }
@@ -285,37 +300,38 @@ export default function ChatWindow({ token, user, conversationId }) {
 
     } catch (error) {
       console.error('Send message failed:', error);
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Error: ${error.message}. Please verify the backend is running and Ollama config is correct.`,
-        isError: true,
-        created_at: new Date().toISOString()
-      }]);
+      replaceWorkingWithError(setMessages, error.message);
     } finally {
       setLoading(false);
       setStreaming(false);
-      setPendingMessage(null);
     }
   };
 
   const handleConsentConfirm = () => {
+    const msg = pendingMessageRef.current || pendingMessage;
+    pendingMessageRef.current = null;
+    setPendingMessage(null);
     setShowConsentModal(false);
-    if (pendingMessage) {
-      handleSendMessage(pendingMessage, { useCloud: true });
-    }
+    if (msg) handleSendMessage(msg, { useCloud: true });
   };
 
   const handleConsentDecline = () => {
+    const msg = pendingMessageRef.current || pendingMessage;
+    pendingMessageRef.current = null;
+    setPendingMessage(null);
     setShowConsentModal(false);
-    if (pendingMessage) {
-      handleSendMessage(pendingMessage, { forceLocal: true });
-    }
+    if (msg) handleSendMessage(msg, { forceLocal: true });
   };
 
   const handleConsentCancel = () => {
     setShowConsentModal(false);
-    setMessages(prev => prev.slice(0, -1));
+    pendingMessageRef.current = null;
     setPendingMessage(null);
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last?.role === 'user') return prev.slice(0, -1);
+      return prev.filter((m) => !m.working);
+    });
   };
 
   const handleKeyDown = (e) => {
@@ -349,7 +365,7 @@ export default function ChatWindow({ token, user, conversationId }) {
               disabled={user?.username === 'guest'}
               style={{ cursor: user?.username === 'guest' ? 'not-allowed' : 'pointer' }}
             />
-            Auto Cloud Delegation (Groq)
+            Use cloud AI when available (faster)
           </label>
           {user?.username !== 'guest' && autoCloud && (
             <label style={{ 
@@ -367,7 +383,7 @@ export default function ChatWindow({ token, user, conversationId }) {
                 onChange={(e) => setAllowGroqDocs(e.target.checked)}
                 style={{ cursor: 'pointer' }}
               />
-              Allow Groq to read documents
+              Share document text with cloud AI
             </label>
           )}
           <div className="badge" style={{
@@ -379,28 +395,35 @@ export default function ChatWindow({ token, user, conversationId }) {
             gap: '4px'
           }}>
             {(user?.username !== 'guest' && autoCloud) ? <Sparkles size={12} /> : <ShieldCheck size={12} />}
-            {user?.username === 'guest' ? 'Offline Only (Guest)' : (autoCloud ? 'Cloud via Groq' : 'Offline (Ollama)')}
+            {user?.username === 'guest' ? 'Guest — local only' : (autoCloud ? 'Cloud assist on' : 'Local AI only')}
           </div>
         </div>
       </header>
 
       <main className="chat-thread">
         <div className="chat-thread-inner">
-          {messages.length === 0 ? (
+          {historyError && (
+            <div className="chat-inline-alert" role="alert">{historyError}</div>
+          )}
+          {historyLoading ? (
+            <div className="chat-welcome chat-welcome-loading">
+              <p>Loading conversation…</p>
+            </div>
+          ) : messages.length === 0 ? (
             <div className="chat-welcome">
               <div className="chat-welcome-icon">
                 <MessageSquarePlaceholder />
               </div>
               <h3>How can I help with your BOQ today?</h3>
-              <p>Upload a document in <strong>Documents</strong>, attach it here, or try a suggestion below.</p>
+              <p>Upload a file under <strong>Documents</strong>, attach it with the paperclip, or try a starter question below.</p>
               <div className="chat-suggestions">
-                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Explain this BOQ section by section in plain English for a quantity surveyor.')}>
-                  Explain this BOQ
+                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Give a structured preliminary BOQ for a small generator room 12 ft x 8 ft with headings and a table.')}>
+                  Generator room BOQ
                 </button>
-                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Summarise earthwork and disposal with quantities and amounts.')}>
+                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Summarise earthwork and disposal with quantities and amounts in sections.')}>
                   Earthwork summary
                 </button>
-                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('List concrete items with unit, qty, rate and amount.')}>
+                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('List concrete items with unit, qty, rate and amount in a table.')}>
                   Concrete &amp; formwork
                 </button>
               </div>
@@ -427,14 +450,14 @@ export default function ChatWindow({ token, user, conversationId }) {
             disabled={loading || streaming || uploadingFile}
           />
           <div className="chat-composer-extras">
-        {fileError && !attachedFile && (
+        {fileError && (
           <div className="chat-file-error" role="alert">
             <AlertCircle size={14} />
             <span>{fileError}</span>
             <button
               type="button"
               onClick={() => setFileError('')}
-              aria-label="Dismiss error"
+              aria-label="Dismiss file error"
             >
               <X size={14} />
             </button>
@@ -480,20 +503,18 @@ export default function ChatWindow({ token, user, conversationId }) {
               <span style={{ color: '#fbbf24', fontSize: '0.75rem' }}>(Processing...)</span>
             )}
             {attachedFile.status === 'ready' && (
-              <span style={{ color: '#10b981', fontSize: '0.75rem' }}>(Ready - scoped to query)</span>
+              <span style={{ color: '#10b981', fontSize: '0.75rem' }}>(Ready for chat)</span>
             )}
             {attachedFile.status === 'failed' && (
-              <span 
-                style={{ color: '#ef4444', fontSize: '0.75rem', cursor: 'help', display: 'flex', alignItems: 'center', gap: '3px' }}
-                title={attachedFile.error_message || 'Processing failed'}
-              >
+              <span style={{ color: '#ef4444', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', maxWidth: '280px' }}>
                 <AlertCircle size={12} />
-                Failed (hover for info)
+                {friendlyDocError(attachedFile.error_message || fileError || 'Processing failed')}
               </span>
             )}
             
             <button
               type="button"
+              aria-label="Remove attached file"
               onClick={() => {
                 setAttachedFile(null);
                 setFileError('');

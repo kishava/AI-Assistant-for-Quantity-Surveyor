@@ -18,6 +18,7 @@ export default function ThinkingBlock({ steps, defaultOpen = false, live = false
         className="thought-block-toggle"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        aria-label={live ? 'Assistant thought process in progress' : 'Show assistant thought process'}
       >
         <ChevronRight size={16} className={`thought-chevron${open ? ' open' : ''}`} />
         <Sparkles size={14} className="thought-icon" />

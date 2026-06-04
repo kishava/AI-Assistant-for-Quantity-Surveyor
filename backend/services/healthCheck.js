@@ -8,8 +8,10 @@ export async function getSystemHealth() {
     checkGroqHealth(),
   ]);
 
-  const coreOk = ollama.status === 'ok' || ollama.status === 'warning';
-  const overall = coreOk ? 'ok' : 'degraded';
+  let overall = 'ok';
+  if (ollama.status === 'error') overall = 'degraded';
+  else if (ollama.status === 'warning') overall = 'warning';
+  else if (chroma.status === 'error') overall = 'warning';
 
   return {
     status: overall,

@@ -6,6 +6,7 @@ import { streamRouteQuery, estimateTokens } from '../services/aiRouter.js';
 import { retrieveContext } from '../services/contextRetrieval.js';
 import { buildCompiledAnswerMessages } from '../services/qsPrompts.js';
 import { enhanceMarkdownStructure, formatStreamToken } from '../services/responseFormat.js';
+import { toUserChatError } from '../services/userErrors.js';
 
 const router = express.Router();
 const CLOUD_THRESHOLD = parseInt(process.env.CLOUD_THRESHOLD_TOKENS || '1000', 10);
@@ -126,6 +127,10 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.end();
     }
 
+    if (aiResult.fallbackNotice) {
+      writeSse(res, `[NOTICE]${aiResult.fallbackNotice}`);
+    }
+
     const modelLabel = `${aiResult.provider} (${aiResult.model})`;
 
     const insertMsg = db.prepare('INSERT INTO messages (user_id, role, content, model_used, conversation_id) VALUES (?, ?, ?, ?, ?)');
@@ -140,10 +145,11 @@ router.post('/', authMiddleware, async (req, res) => {
     res.end();
   } catch (error) {
     console.error('Chat endpoint error:', error);
+    const userError = toUserChatError(error);
     if (!res.headersSent) {
-      res.status(500).json({ error: 'An error occurred during chat completion' });
+      res.status(500).json({ error: userError });
     } else {
-      writeSse(res, '[ERROR]An internal error occurred during chat completion');
+      writeSse(res, `[ERROR]${userError}`);
       writeSse(res, '[DONE]');
       res.end();
     }

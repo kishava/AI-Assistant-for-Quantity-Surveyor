@@ -12,7 +12,7 @@ export default function AssistantProgress({ msg }) {
           QS
         </div>
         <div className="chat-msg-body">
-          <div className="chat-status-line">
+          <div className="chat-status-line" aria-live="polite" aria-busy="true">
             <span className="progress-spinner" aria-hidden="true" />
             <span>{stage}</span>
           </div>
@@ -22,7 +22,7 @@ export default function AssistantProgress({ msg }) {
           {!thinking.length && (
             <p className="chat-status-hint">Reading your documents…</p>
           )}
-          <span className="chat-typing-indicator">
+          <span className="chat-typing-indicator" aria-label="Assistant is working">
             <span /><span /><span />
           </span>
         </div>

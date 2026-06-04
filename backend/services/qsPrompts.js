@@ -116,7 +116,7 @@ export function buildCompiledAnswerMessages({
     userContent =
       `User question: ${message}\n` +
       'Use ## Summary and bullet points. Keep it concise.' +
-      FORMAT_RULES_BLOCK;
+      (isQsWorkQuery(message) ? FORMAT_RULES_BLOCK : '');
   }
 
   // Trim history so prior wall-of-text replies do not reinforce bad format

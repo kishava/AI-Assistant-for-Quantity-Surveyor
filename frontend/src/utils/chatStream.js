@@ -6,6 +6,13 @@ function parseSseDataLine(line) {
   return payload;
 }
 
+/** Join all data: lines in one SSE event (multiline tokens / [REPLACE] payloads). */
+function payloadFromEventBlock(part) {
+  const lines = part.split('\n').filter((l) => l.startsWith('data:'));
+  if (!lines.length) return null;
+  return lines.map(parseSseDataLine).join('\n');
+}
+
 export async function consumeChatStream(response, onToken, onMeta) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -20,10 +27,7 @@ export async function consumeChatStream(response, onToken, onMeta) {
     buffer = parts.pop() || '';
 
     for (const part of parts) {
-      const line = part.split('\n').find(l => l.startsWith('data:'));
-      if (!line) continue;
-
-      const payload = parseSseDataLine(line);
+      const payload = payloadFromEventBlock(part);
       if (payload === null) continue;
 
       if (payload === '[DONE]') {
@@ -46,11 +50,13 @@ export async function consumeChatStream(response, onToken, onMeta) {
         onMeta({ answerStart: true });
       } else if (payload.startsWith('[REPLACE]')) {
         onMeta({ replace: payload.slice(9) });
+      } else if (payload.startsWith('[NOTICE]')) {
+        onMeta({ notice: payload.slice(8) });
       } else if (payload.startsWith('[CONSENT_REQUIRED]')) {
         try {
           onMeta({ consentRequired: JSON.parse(payload.slice(18)) });
         } catch {
-          onMeta({ consentRequired: { tokenCount: 0, threshold: 1000 } });
+          onMeta({ consentRequired: null });
         }
       } else {
         onToken(payload);

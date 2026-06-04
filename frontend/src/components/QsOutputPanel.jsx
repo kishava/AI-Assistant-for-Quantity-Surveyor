@@ -9,11 +9,19 @@ export default function QsOutputPanel({ token, documentId, documentLabel, disabl
   const [hint, setHint] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [emptyResult, setEmptyResult] = useState(false);
   const [result, setResult] = useState(null);
+
+  const scopeText = documentLabel
+    ? `"${documentLabel}"`
+    : documentId
+      ? 'the attached document'
+      : 'your most recent ready document (upload one under Documents if none appears)';
 
   const handleGenerate = async () => {
     setLoading(true);
     setError('');
+    setEmptyResult(false);
     setResult(null);
 
     try {
@@ -36,6 +44,11 @@ export default function QsOutputPanel({ token, documentId, documentLabel, disabl
         setError(data.error);
         return;
       }
+      if (!data.tables?.length) {
+        setEmptyResult(true);
+        setOpen(true);
+        return;
+      }
       setResult(data);
       setOpen(true);
     } catch (err) {
@@ -54,17 +67,22 @@ export default function QsOutputPanel({ token, documentId, documentLabel, disabl
         className="qs-output-panel-toggle"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        aria-controls="qs-output-panel-body"
       >
         <Table2 size={16} />
-        <span>Generate QS tables &amp; structures</span>
+        <span>Generate QS tables</span>
         <ChevronDown size={16} className={`reasoning-chevron${open ? ' open' : ''}`} />
       </button>
 
       {open && (
-        <div className="qs-output-panel-body">
+        <div id="qs-output-panel-body" className="qs-output-panel-body">
           <p className="qs-output-panel-desc">
-            Build structured tables from {documentLabel ? `"${documentLabel}"` : 'your latest uploaded document'} — ready to review or export as CSV.
+            Build structured tables from {scopeText} — review here or export as CSV.
           </p>
+
+          {disabled && (
+            <p className="qs-output-panel-hint">Wait until the assistant finishes the current reply.</p>
+          )}
 
           <div className="qs-output-form">
             <label className="qs-output-label">
@@ -82,9 +100,7 @@ export default function QsOutputPanel({ token, documentId, documentLabel, disabl
                 ))}
               </select>
             </label>
-            {selected && (
-              <p className="qs-output-type-hint">{selected.description}</p>
-            )}
+            {selected && <p className="qs-output-type-hint">{selected.description}</p>}
 
             <label className="qs-output-label">
               Focus (optional)
@@ -115,21 +131,27 @@ export default function QsOutputPanel({ token, documentId, documentLabel, disabl
             </button>
           </div>
 
-          {error && <div className="qs-output-error">{error}</div>}
+          {error && (
+            <div className="qs-output-error" role="alert">
+              {error}
+              <button type="button" className="qs-output-retry" onClick={handleGenerate} disabled={loading || disabled}>
+                Try again
+              </button>
+            </div>
+          )}
+
+          {emptyResult && (
+            <div className="qs-output-empty" role="status">
+              No table rows could be extracted. Try a different output type, reprocess the file in Documents, or ask in chat.
+            </div>
+          )}
 
           {result && result.tables?.length > 0 && (
             <div className="qs-output-results">
               <h3 className="qs-output-result-title">{result.title}</h3>
-              {result.document && (
-                <p className="qs-output-result-meta">Source: {result.document}</p>
-              )}
+              {result.document && <p className="qs-output-result-meta">Source: {result.document}</p>}
               {result.tables.map((table, idx) => (
-                <QsDataTable
-                  key={idx}
-                  title={table.title}
-                  columns={table.columns}
-                  rows={table.rows}
-                />
+                <QsDataTable key={idx} title={table.title} columns={table.columns} rows={table.rows} />
               ))}
               {result.notes?.length > 0 && (
                 <div className="qs-output-notes">

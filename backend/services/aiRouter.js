@@ -241,6 +241,8 @@ export async function streamRouteQuery(messages, useCloudConsent = false, forceL
   let provider = 'Local (Ollama)';
   let model = OLLAMA_MODEL;
 
+  let fallbackNotice = null;
+
   if (useCloudConsent && !forceLocal) {
     try {
       await streamGroq(messages, capture);
@@ -250,6 +252,7 @@ export async function streamRouteQuery(messages, useCloudConsent = false, forceL
       console.warn('Groq stream failed, falling back to Ollama:', error.message);
       content = '';
       await streamOllama(messages, capture);
+      fallbackNotice = 'Cloud assist was unavailable. This answer was generated on your device instead.';
     }
   } else {
     await streamOllama(messages, capture);
@@ -259,7 +262,7 @@ export async function streamRouteQuery(messages, useCloudConsent = false, forceL
     throw new Error('The AI model returned an empty response. Check that Ollama is running and the model is pulled.');
   }
 
-  return { content, provider, model };
+  return { content, provider, model, fallbackNotice };
 }
 
 export async function checkOllamaHealth() {
