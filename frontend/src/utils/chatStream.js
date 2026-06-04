@@ -44,6 +44,8 @@ export async function consumeChatStream(response, onToken, onMeta) {
         onMeta({ thinking: payload.slice(10) });
       } else if (payload === '[ANSWER_START]') {
         onMeta({ answerStart: true });
+      } else if (payload.startsWith('[REPLACE]')) {
+        onMeta({ replace: payload.slice(9) });
       } else if (payload.startsWith('[CONSENT_REQUIRED]')) {
         try {
           onMeta({ consentRequired: JSON.parse(payload.slice(18)) });

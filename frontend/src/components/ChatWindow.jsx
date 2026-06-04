@@ -254,6 +254,14 @@ export default function ChatWindow({ token, user, conversationId }) {
           if (meta.answerStart) {
             patchAssistant({ answerPhase: 'compiling', stage: 'Writing your answer…', working: true });
           }
+          if (meta.replace) {
+            accumulated = meta.replace;
+            patchAssistant({
+              content: accumulated,
+              working: false,
+              streaming: true,
+            });
+          }
           if (meta.model) modelUsed = meta.model;
           if (meta.citations) citations = meta.citations;
           if (meta.error) {

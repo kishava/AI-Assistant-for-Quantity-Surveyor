@@ -133,7 +133,7 @@ async function streamOllama(messages, onToken) {
       model: OLLAMA_MODEL,
       messages: messages.map(m => ({ role: m.role, content: m.content })),
       stream: true,
-      options: { temperature: 0.15, num_predict: 1800 },
+      options: { temperature: 0.08, num_predict: 2200, top_p: 0.9 },
     }),
   }, OLLAMA_TIMEOUT_MS);
 

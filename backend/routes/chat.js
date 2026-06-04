@@ -5,6 +5,7 @@ import authMiddleware from '../middleware/auth.js';
 import { streamRouteQuery, estimateTokens } from '../services/aiRouter.js';
 import { retrieveContext } from '../services/contextRetrieval.js';
 import { buildCompiledAnswerMessages } from '../services/qsPrompts.js';
+import { enhanceMarkdownStructure, formatStreamToken } from '../services/responseFormat.js';
 
 const router = express.Router();
 const CLOUD_THRESHOLD = parseInt(process.env.CLOUD_THRESHOLD_TOKENS || '1000', 10);
@@ -107,10 +108,17 @@ router.post('/', authMiddleware, async (req, res) => {
       finalUseCloud,
       finalForceLocal,
       (token) => {
-        accumulated += token;
-        writeSse(res, token);
+        const formatted = formatStreamToken(token);
+        accumulated += formatted;
+        writeSse(res, formatted);
       }
     );
+
+    const enhanced = enhanceMarkdownStructure(accumulated);
+    if (enhanced !== accumulated) {
+      writeSse(res, `[REPLACE]${enhanced}`);
+      accumulated = enhanced;
+    }
 
     if (aiResult.consentRequired) {
       writeSse(res, '[ERROR]Consent required for large query');

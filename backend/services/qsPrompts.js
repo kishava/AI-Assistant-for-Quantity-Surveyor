@@ -1,40 +1,52 @@
 import { isGarbledOcr } from './ocrQuality.js';
+import { isQsWorkQuery } from './responseFormat.js';
+
+const FORMAT_EXAMPLE = `
+EXAMPLE of correct formatting (follow this style):
+
+## Summary
+Brief answer in 2 sentences.
+
+## Preliminary BOQ
+| Item | Description | Unit | Qty | Rate | Amount |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Excavation | m3 | 10 | — | — |
+
+## Assumptions
+- Assumption one
+- Assumption two
+
+## What to verify on site
+- Check item A
+- Check item B
+`;
 
 const QS_SYSTEM_PROMPT =
-  'You are a Quantity Surveyor (QS) assistant in a chat app (like ChatGPT). ' +
-  'Talk to the user like a sharp, friendly colleague — natural, clear, and practical. ' +
-  'Use short paragraphs, bullet points, and numbered lists where they help. ' +
-  'Never invent BOQ figures. Never say "snippet" or "I cannot access documents" when text is provided.';
+  'You are a Quantity Surveyor (QS) assistant in a chat app like ChatGPT.\n' +
+  'CRITICAL: Never output one long paragraph. Always use markdown structure.\n' +
+  'Required: ## headings, blank lines between sections, bullet lists (- ), numbered lists (1. 2. 3.), tables for BOQ lines.\n' +
+  'Max 3 sentences per paragraph. If estimating without a tender document, label figures as indicative ranges.\n' +
+  FORMAT_EXAMPLE;
+
+const FORMAT_RULES_BLOCK =
+  '\n\n=== MANDATORY FORMAT (do not ignore) ===\n' +
+  '1. Start with ## Summary (2 short sentences).\n' +
+  '2. Use ## headings for each major section.\n' +
+  '3. Put a blank line before every ## heading and before every numbered item.\n' +
+  '4. For BOQ/cost items use EITHER a markdown table OR numbered list — never inline "1. 2. 3." in one paragraph.\n' +
+  '5. End with ## What to verify (bullet list).\n' +
+  '6. Do NOT write "Here is an estimated BOQ:" followed by a wall of text.\n' +
+  '=== END FORMAT ===\n';
 
 const THINKING_SYSTEM_PROMPT =
-  'You are a QS assistant performing internal document review before answering a colleague. ' +
-  'Output bullet points only (use "- "). No headings, no markdown ## sections, no final answer for the user. ' +
-  'Maximum 8 bullets, 120 words total.';
+  'Internal review only. Bullet points (- ), max 8 bullets, 120 words. No ## headings. No user-facing answer.';
 
-const BOQ_ANSWER_FORMAT =
-  'Write the chat reply only (no meta-commentary about your process).\n\n' +
-  'Style (organic, like ChatGPT/Gemini):\n' +
-  '1. Open with 1–2 direct sentences that answer the question.\n' +
-  '2. Use ## headings only for major sections (keep headings short).\n' +
-  '3. Use bullet points (- ) for lists of items, checks, or takeaways.\n' +
-  '4. Use numbered lists (1. 2. 3.) for steps or ranked points.\n' +
-  '5. For BOQ line items, use markdown tables:\n' +
-  '   | Item | Description | Unit | Qty | Rate | Amount |\n' +
-  '6. Keep paragraphs to 2–4 lines max.\n' +
-  '7. End with a short **What to verify** bullet list if useful.\n\n' +
-  'Suggested flow when explaining a BOQ:\n' +
-  '- Brief intro + document/project name\n' +
-  '- ## Key sections (earthwork, civil, etc.) with totals\n' +
-  '- Tables or bullets for line items\n' +
-  '- ## Takeaways for QS\n\n' +
-  'Copy numbers exactly from the document. Use "—" for missing data.';
+const DOCUMENT_ANSWER_INTRO =
+  'Answer using the document text below. Copy figures exactly from the document when present.\n';
 
-const GARBLED_USER_REPLY =
-  'Reply in under 120 words with ONLY:\n' +
-  '1. **Problem:** OCR/scan quality is poor.\n' +
-  '2. **What to do:** Reprocess in Documents (refresh icon); use a clearer PDF; `ollama pull moondream` for images.\n' +
-  '3. **Then ask again.**\n' +
-  'No generic QS theory.';
+const GENERAL_QS_INTRO =
+  'No BOQ document is attached. Give a structured **indicative** QS estimate for the user\'s scenario.\n' +
+  'State clearly that figures are preliminary until measured from drawings or a tender BOQ.\n';
 
 function docContextBlock(contextChunks, docLabel) {
   return (
@@ -58,7 +70,7 @@ export function buildThinkingMessages({ message, contextChunks, retrievalMeta })
           `User question: ${message}\n\n` +
           (retrievalNotes ? `System notes:\n${retrievalNotes}\n\n` : '') +
           `${docContextBlock(contextChunks, docLabel)}\n\n` +
-          'Bullets: which BOQ sections you see; key quantities/rates spotted; anything unclear; how you will structure the compiled answer.',
+          'Bullets: sections seen; key figures; gaps; planned answer structure.',
       },
     ],
   };
@@ -75,33 +87,50 @@ export function buildCompiledAnswerMessages({
   const docLabel = uniqueCitations[0] || 'uploaded document';
   const fullContext = contextChunks.join('\n\n');
   const garbled = retrievalMeta?.ocrQuality === 'poor' || (fullContext && isGarbledOcr(fullContext));
+  const hasDocument = contextChunks.length > 0 && !garbled;
 
   let userContent;
 
-  if (contextChunks.length === 0) {
+  if (garbled) {
     userContent =
-      'No document text was loaded. Tell the user to upload a BOQ in Documents, wait for **Ready**, then ask again.\n\n' +
-      `User question: ${message}`;
-  } else if (garbled) {
-    userContent =
-      `${GARBLED_USER_REPLY}\n\n` +
+      'OCR quality is poor. Reply with ## Summary, ## Problem, ## What to do (reprocess file, clearer scan), under 120 words.\n\n' +
       `Filename: "${docLabel}"\n\n` +
-      `--- Poor extract (do not quote as facts) ---\n${fullContext.slice(0, 800)}\n---\n\n` +
-      `User question: ${message}`;
-  } else {
+      `--- Poor extract ---\n${fullContext.slice(0, 800)}\n---\n\n` +
+      `User question: ${message}` +
+      FORMAT_RULES_BLOCK;
+  } else if (hasDocument) {
     userContent =
-      `${BOQ_ANSWER_FORMAT}\n\n` +
+      `${DOCUMENT_ANSWER_INTRO}\n` +
       (analysisThinking
-        ? `--- INTERNAL ANALYSIS (already done — do not repeat in your reply) ---\n${analysisThinking}\n--- END ANALYSIS ---\n\n`
+        ? `--- INTERNAL NOTES (do not repeat) ---\n${analysisThinking}\n---\n\n`
         : '') +
       `${docContextBlock(contextChunks, docLabel)}\n\n` +
-      `User question: ${message}`;
+      `User question: ${message}` +
+      FORMAT_RULES_BLOCK;
+  } else if (isQsWorkQuery(message)) {
+    userContent =
+      `${GENERAL_QS_INTRO}\n` +
+      `User question: ${message}` +
+      FORMAT_RULES_BLOCK;
+  } else {
+    userContent =
+      `User question: ${message}\n` +
+      'Use ## Summary and bullet points. Keep it concise.' +
+      FORMAT_RULES_BLOCK;
   }
+
+  // Trim history so prior wall-of-text replies do not reinforce bad format
+  const trimmedHistory = history.slice(-4).map((m) => {
+    if (m.role === 'assistant' && m.content?.length > 2000) {
+      return { ...m, content: m.content.slice(0, 500) + '\n\n[Previous reply truncated]' };
+    }
+    return m;
+  });
 
   return {
     messagesToSend: [
       { role: 'system', content: QS_SYSTEM_PROMPT },
-      ...history,
+      ...trimmedHistory,
       { role: 'user', content: userContent },
     ],
     uniqueCitations,
@@ -109,7 +138,6 @@ export function buildCompiledAnswerMessages({
   };
 }
 
-/** Single-phase fallback (no document or simple queries). */
 export function buildQsChatMessages(opts) {
   return buildCompiledAnswerMessages({ ...opts, analysisThinking: '' });
 }
