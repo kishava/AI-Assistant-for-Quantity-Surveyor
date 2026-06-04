@@ -2,13 +2,9 @@ import express from 'express';
 import { randomUUID } from 'crypto';
 import db from '../db.js';
 import authMiddleware from '../middleware/auth.js';
-import { streamRouteQuery, routeQuery, estimateTokens } from '../services/aiRouter.js';
+import { streamRouteQuery, estimateTokens } from '../services/aiRouter.js';
 import { retrieveContext } from '../services/contextRetrieval.js';
-import {
-  buildCompiledAnswerMessages,
-  buildThinkingMessages,
-  splitThinkingLines,
-} from '../services/qsPrompts.js';
+import { buildCompiledAnswerMessages } from '../services/qsPrompts.js';
 
 const router = express.Router();
 const CLOUD_THRESHOLD = parseInt(process.env.CLOUD_THRESHOLD_TOKENS || '1000', 10);
@@ -60,78 +56,49 @@ router.post('/', authMiddleware, async (req, res) => {
       }
     }
 
+    writeSsePrep(res);
+    writeSse(res, '[STAGE]Connecting…');
+
     let contextChunks = [];
     let retrievalMeta = { usedDocs: [], thinking: [] };
 
     if (!finalUseCloud || canSendDocsToCloud) {
+      writeSse(res, '[STAGE]Reading documents…');
       const retrieved = await retrieveContext(message, req.user.id, documentId || null);
       contextChunks = retrieved.chunks;
       retrievalMeta = retrieved.meta;
+      for (const line of retrievalMeta.thinking || []) {
+        writeSse(res, `[THINKING]${line}`);
+      }
     }
 
     const historyStmt = db.prepare(`
       SELECT role, content FROM messages 
       WHERE user_id = ? AND conversation_id = ?
-      ORDER BY id DESC LIMIT 6
+      ORDER BY id DESC LIMIT 4
     `);
     const history = historyStmt.all(req.user.id, activeConversationId).reverse();
-
-    const garbled = retrievalMeta?.ocrQuality === 'poor';
-    const useTwoPhase =
-      contextChunks.length > 0 && !garbled && (!finalUseCloud || canSendDocsToCloud);
-
-    let analysisThinking = '';
-    const allThinkingLines = [...(retrievalMeta.thinking || [])];
-
-    if (useTwoPhase) {
-      try {
-        const { messagesToSend: thinkMsgs } = buildThinkingMessages({
-          message,
-          contextChunks,
-          retrievalMeta,
-        });
-        const thinkResult = await routeQuery(thinkMsgs, finalUseCloud, finalForceLocal);
-        analysisThinking = (thinkResult.content || '').trim();
-        allThinkingLines.push(...splitThinkingLines(analysisThinking));
-      } catch (thinkErr) {
-        console.warn('Thinking phase skipped:', thinkErr.message);
-      }
-    }
 
     const { messagesToSend, uniqueCitations } = buildCompiledAnswerMessages({
       message,
       history,
       contextChunks,
       retrievalMeta,
-      analysisThinking,
+      analysisThinking: '',
     });
 
     const tokenCount = estimateTokens(messagesToSend.map(m => m.content).join('\n'));
     if (tokenCount >= CLOUD_THRESHOLD && !finalUseCloud && !finalForceLocal && !isGuest) {
-      return res.status(200).json({
-        consentRequired: true,
+      writeSse(res, `[CONSENT_REQUIRED]${JSON.stringify({
         tokenCount,
         threshold: CLOUD_THRESHOLD,
-        message: 'This query is large. Send to Groq cloud for a faster response?'
-      });
+        message: 'This query is large. Send to Groq cloud for a faster response?',
+      })}`);
+      writeSse(res, '[DONE]');
+      return res.end();
     }
 
-    writeSsePrep(res);
-
-    if (!finalUseCloud || canSendDocsToCloud) {
-      writeSse(res, '[STAGE]Reading documents…');
-      for (const line of retrievalMeta.thinking || []) {
-        writeSse(res, `[THINKING]${line}`);
-      }
-      if (useTwoPhase && analysisThinking) {
-        writeSse(res, '[STAGE]Reviewing BOQ structure…');
-        for (const line of splitThinkingLines(analysisThinking)) {
-          writeSse(res, `[THINKING]${line}`);
-        }
-      }
-    }
-
-    writeSse(res, '[STAGE]Preparing your answer…');
+    writeSse(res, '[STAGE]Writing your answer…');
     writeSse(res, '[ANSWER_START]');
 
     let accumulated = '';

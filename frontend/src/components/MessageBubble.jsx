@@ -129,18 +129,20 @@ export default function MessageBubble({ msg }) {
         </div>
       )}
 
-      {!isUser && (
+      {!isUser && msg.content?.trim() && (
         <div className="answer-label">Answer</div>
       )}
 
       <div
-        className={`message-content${!isUser ? ' message-content-answer' : ''}`}
+        className={`message-content${!isUser && msg.content?.trim() ? ' message-content-answer' : ''}`}
         style={{
           color: msg.isError ? '#f43f5e' : 'inherit',
           borderColor: msg.isError ? 'rgba(244, 63, 94, 0.3)' : undefined
         }}
       >
-        {formatContent(msg.content)}
+        {msg.content?.trim() ? formatContent(msg.content) : (
+          <span className="progress-hint">Waiting for answer…</span>
+        )}
       </div>
 
       {!isUser && msg.citations && msg.citations.length > 0 && (

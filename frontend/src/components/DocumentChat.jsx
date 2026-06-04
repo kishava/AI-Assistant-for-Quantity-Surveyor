@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
 import MessageBubble from './MessageBubble.jsx';
+import AssistantProgress from './AssistantProgress.jsx';
 import CloudConsentModal from './CloudConsentModal.jsx';
 import { consumeChatStream } from '../utils/chatStream.js';
 
@@ -86,14 +87,26 @@ export default function DocumentChat({ document, token, user, onBack }) {
   const handleSendMessage = async (text, options = {}) => {
     if (!text.trim() || loading) return;
 
-    setLoading(true);
-    setLoadingStage('Connecting…');
     setInputText('');
+    setLoading(false);
+    setStreaming(true);
 
     const isRetry = options.useCloud || options.forceLocal;
     const now = new Date().toISOString();
+    const progressBubble = {
+      role: 'assistant',
+      content: '',
+      thinking: [],
+      streaming: true,
+      working: true,
+      stage: 'Sending request…',
+      created_at: now,
+    };
+
     if (!isRetry) {
-      setMessages(prev => [...prev, { role: 'user', content: text, created_at: now }]);
+      setMessages(prev => [...prev, { role: 'user', content: text, created_at: now }, progressBubble]);
+    } else {
+      setMessages(prev => [...prev, progressBubble]);
     }
 
     try {
@@ -132,92 +145,65 @@ export default function DocumentChat({ document, token, user, onBack }) {
       let modelUsed = '';
       let citations = [];
       const thinkingAccum = [];
-      let assistantStarted = false;
 
-      const startAssistantBubble = () => {
-        if (assistantStarted) return;
-        assistantStarted = true;
-        setLoading(false);
-        setStreaming(true);
-        setLoadingStage('');
-        const assistantStartedAt = new Date().toISOString();
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: '',
-          thinking: [...thinkingAccum],
-          streaming: true,
-          created_at: assistantStartedAt
-        }]);
+      const patchAssistant = (patch) => {
+        setMessages((prev) => {
+          const updated = [...prev];
+          const idx = updated.findLastIndex((m) => m.role === 'assistant');
+          if (idx === -1) return prev;
+          updated[idx] = { ...updated[idx], ...patch };
+          return updated;
+        });
       };
 
       await consumeChatStream(
         response,
         (tokenPart) => {
-          if (!assistantStarted) startAssistantBubble();
           accumulated += tokenPart;
-          setMessages(prev => {
-            const updated = [...prev];
-            const last = updated[updated.length - 1];
-            if (last?.role === 'assistant') {
-              updated[updated.length - 1] = { ...last, content: accumulated, streaming: true };
-            }
-            return updated;
+          patchAssistant({
+            content: accumulated,
+            working: false,
+            answerPhase: undefined,
+            streaming: true,
           });
         },
         (meta) => {
-          if (meta.stage) setLoadingStage(meta.stage);
-          if (meta.thinking) {
-            if (!thinkingAccum.includes(meta.thinking)) {
-              thinkingAccum.push(meta.thinking);
-            }
-            setMessages(prev => {
-              const updated = [...prev];
-              const last = updated[updated.length - 1];
-              if (last?.role === 'assistant') {
-                updated[updated.length - 1] = { ...last, thinking: [...thinkingAccum] };
-              }
-              return updated;
+          if (meta.consentRequired) {
+            setStreaming(false);
+            setPendingMessage(text);
+            setPendingTokenInfo({
+              tokenCount: meta.consentRequired.tokenCount,
+              threshold: meta.consentRequired.threshold,
             });
+            setShowConsentModal(true);
+            setMessages((prev) => prev.filter((m) => !m.working));
+            return;
+          }
+          if (meta.stage) patchAssistant({ stage: meta.stage, working: true });
+          if (meta.thinking) {
+            if (!thinkingAccum.includes(meta.thinking)) thinkingAccum.push(meta.thinking);
+            patchAssistant({ thinking: [...thinkingAccum], working: true });
           }
           if (meta.answerStart) {
-            startAssistantBubble();
+            patchAssistant({ answerPhase: 'compiling', stage: 'Writing your answer…', working: true });
           }
           if (meta.model) modelUsed = meta.model;
           if (meta.citations) citations = meta.citations;
-          if (meta.error) accumulated = `Error: ${meta.error}`;
+          if (meta.error) {
+            accumulated = `Error: ${meta.error}`;
+            patchAssistant({ content: accumulated, working: false, isError: true });
+          }
           if (meta.done) {
-            setLoading(false);
             setStreaming(false);
-            setLoadingStage('');
-            if (!assistantStarted && thinkingAccum.length > 0) {
-              setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: accumulated || 'No response generated.',
-                thinking: [...thinkingAccum],
-                model_used: modelUsed,
-                citations,
-                streaming: false,
-                created_at: new Date().toISOString()
-              }]);
-            } else {
-              setMessages(prev => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last?.role === 'assistant') {
-                  updated[updated.length - 1] = {
-                    ...last,
-                    role: 'assistant',
-                    content: accumulated,
-                    thinking: thinkingAccum.length ? [...thinkingAccum] : last.thinking,
-                    model_used: modelUsed,
-                    citations,
-                    streaming: false,
-                    created_at: last.created_at || new Date().toISOString()
-                  };
-                }
-                return updated;
-              });
-            }
+            patchAssistant({
+              content: accumulated || 'No response generated.',
+              thinking: thinkingAccum.length ? [...thinkingAccum] : undefined,
+              model_used: modelUsed,
+              citations,
+              streaming: false,
+              working: false,
+              answerPhase: undefined,
+            });
           }
         }
       );
@@ -322,24 +308,14 @@ export default function DocumentChat({ document, token, user, onBack }) {
           ) : (
             messages.map((msg, index) => (
               <div key={index} className="message-with-cursor">
-                <MessageBubble msg={msg} />
-                {msg.streaming && <span className="streaming-cursor">|</span>}
+                {msg.role === 'assistant' && msg.working && !msg.content?.trim() ? (
+                  <AssistantProgress msg={msg} />
+                ) : (
+                  <MessageBubble msg={msg} />
+                )}
+                {msg.streaming && msg.content?.trim() && <span className="streaming-cursor">|</span>}
               </div>
             ))
-          )}
-
-          {loading && (
-            <div className="message-bubble assistant">
-              <div className="message-content">
-                {loadingStage ? (
-                  <span className="loading-stage-text">{loadingStage}</span>
-                ) : (
-                  <span className="pulse-dots">
-                    <span></span><span></span><span></span>
-                  </span>
-                )}
-            </div>
-            </div>
           )}
           <div ref={messagesEndRef} />
         </div>

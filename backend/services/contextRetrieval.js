@@ -54,11 +54,14 @@ function loadAllChunks(documentId, limit = 40) {
   return loadSequentialChunks(documentId, limit);
 }
 
-async function loadChunksForDocument(documentId, message, topK = 8) {
+async function loadChunksForDocument(documentId, message, topK = 6) {
   const chunks = [];
 
   if (isBoqStyleQuery(message)) {
-    chunks.push(...loadAllChunks(documentId, 40));
+    chunks.push(...loadAllChunks(documentId, 22));
+    if (chunks.length >= 6) {
+      return chunks.slice(0, 22);
+    }
   }
 
   try {
@@ -78,10 +81,10 @@ async function loadChunksForDocument(documentId, message, topK = 8) {
   }
 
   if (chunks.length === 0) {
-    chunks.push(...loadSequentialChunks(documentId, 12));
+    chunks.push(...loadSequentialChunks(documentId, 10));
   }
 
-  return chunks.slice(0, 16);
+  return chunks.slice(0, 18);
 }
 
 function getLatestReadyDocument(userId) {
