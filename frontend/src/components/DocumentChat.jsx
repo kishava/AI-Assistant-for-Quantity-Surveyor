@@ -207,7 +207,7 @@ export default function DocumentChat({ document, token, user, onBack }) {
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Document-scoped chat</p>
           </div>
         </div>
-      </div>
+      </header>
 
       <QsOutputPanel
         token={token}
