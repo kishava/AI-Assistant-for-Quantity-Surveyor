@@ -1,7 +1,25 @@
 import { ChromaClient } from 'chromadb';
+import { ollamaChromaEmbedding } from './chromaEmbedding.js';
 
 const CHROMA_URL = process.env.CHROMA_URL || 'http://localhost:8000';
-const client = new ChromaClient({ path: CHROMA_URL });
+
+function createChromaClient(url) {
+  try {
+    const parsed = new URL(url);
+    const port = parsed.port
+      ? parseInt(parsed.port, 10)
+      : (parsed.protocol === 'https:' ? 443 : 80);
+    return new ChromaClient({
+      host: parsed.hostname,
+      port,
+      ssl: parsed.protocol === 'https:',
+    });
+  } catch {
+    return new ChromaClient({ host: 'localhost', port: 8000, ssl: false });
+  }
+}
+
+const client = createChromaClient(CHROMA_URL);
 const COLLECTION_NAME = 'qs_documents';
 
 let collection = null;
@@ -10,24 +28,31 @@ async function getCollection() {
   if (!collection) {
     collection = await client.getOrCreateCollection({
       name: COLLECTION_NAME,
-      metadata: { 'hnsw:space': 'cosine' }
+      metadata: { 'hnsw:space': 'cosine' },
+      embeddingFunction: ollamaChromaEmbedding,
     });
   }
   return collection;
 }
 
 export async function storeChunks(chunks, embeddings) {
-  const col = await getCollection();
-  await col.upsert({
-    ids: chunks.map(c => c.id),
-    documents: chunks.map(c => c.text),
-    embeddings: embeddings,
-    metadatas: chunks.map(c => ({
-      documentId: String(c.documentId),
-      chunkIndex: String(c.chunkIndex),
-      userId: String(c.userId || '')
-    }))
-  });
+  try {
+    const col = await getCollection();
+    await col.upsert({
+      ids: chunks.map(c => c.id),
+      documents: chunks.map(c => c.text),
+      embeddings: embeddings,
+      metadatas: chunks.map(c => ({
+        documentId: String(c.documentId),
+        chunkIndex: String(c.chunkIndex),
+        userId: String(c.userId || ''),
+      })),
+    });
+    return true;
+  } catch (error) {
+    console.warn('ChromaDB storeChunks failed:', error.message);
+    return false;
+  }
 }
 
 export async function searchChunks(queryEmbedding, topK = 5, documentId = null, userId = null) {
@@ -51,8 +76,12 @@ export async function searchChunks(queryEmbedding, topK = 5, documentId = null, 
 }
 
 export async function deleteDocumentChunks(documentId) {
-  const col = await getCollection();
-  await col.delete({ where: { documentId: String(documentId) } });
+  try {
+    const col = await getCollection();
+    await col.delete({ where: { documentId: String(documentId) } });
+  } catch (error) {
+    console.warn(`ChromaDB delete skipped for document ${documentId}:`, error.message);
+  }
 }
 
 export async function checkChromaHealth() {

@@ -5,13 +5,19 @@
   "description": "QS AI Assistant — run backend and frontend together",
   "scripts": {
     "install:all": "npm install --prefix backend && npm install --prefix frontend",
+    "install:desktop": "npm install --prefix desktop",
     "dev": "concurrently -n backend,frontend,chroma -c blue,cyan,magenta \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\" \"chroma run --path ./chroma_data\"",
     "dev:backend": "npm run dev --prefix backend",
     "dev:frontend": "npm run dev --prefix frontend",
+    "lint": "npm run lint --prefix frontend",
     "build": "npm run build --prefix frontend",
-    "start": "npm run start --prefix backend"
+    "start": "npm run start --prefix backend",
+    "desktop": "npm run start --prefix desktop",
+    "desktop:prep": "powershell -File scripts/package-desktop.ps1",
+    "desktop:build": "powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "electron": "^42.3.2"
   }
 }

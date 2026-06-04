@@ -8,6 +8,26 @@ export default function Login({ onAuthSuccess }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const handleGuestLogin = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const response = await fetch('/api/auth/guest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Guest login failed');
+      }
+      onAuthSuccess(data.token, data.user);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -22,8 +42,8 @@ export default function Login({ onAuthSuccess }) {
         setError('Username must be 80 characters or fewer.');
         return;
       }
-      if (password.length < 8) {
-        setError('Password must be at least 8 characters.');
+      if (password.length < 6) {
+        setError('Password must be at least 6 characters.');
         return;
       }
       if (password.length > 256) {
@@ -146,17 +166,17 @@ export default function Login({ onAuthSuccess }) {
                 type="password"
                 className="form-input"
                 style={{ paddingLeft: '40px' }}
-                placeholder={isLogin ? '••••••••' : 'Min. 8 characters'}
+                placeholder={isLogin ? '••••••••' : 'Min. 6 characters'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
-                minLength={isLogin ? undefined : 8}
+                minLength={isLogin ? undefined : 6}
                 required
               />
             </div>
             {!isLogin && (
               <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '6px' }}>
-                Use at least 8 characters
+                Use at least 6 characters
               </p>
             )}
           </div>
@@ -179,6 +199,27 @@ export default function Login({ onAuthSuccess }) {
             )}
           </button>
         </form>
+
+        <div style={{ textAlign: 'center', marginTop: '16px' }}>
+          <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>or </span>
+          <button
+            type="button"
+            onClick={handleGuestLogin}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#6366f1',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              padding: '0',
+              textDecoration: 'underline'
+            }}
+            disabled={loading}
+          >
+            Continue as Guest
+          </button>
+        </div>
 
       </div>
     </div>

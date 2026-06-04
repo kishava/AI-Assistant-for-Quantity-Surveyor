@@ -1,23 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Sparkles, ShieldCheck } from 'lucide-react';
+import { Send, Sparkles, ShieldCheck, Paperclip, X, AlertCircle } from 'lucide-react';
 import MessageBubble from './MessageBubble.jsx';
 import CloudConsentModal from './CloudConsentModal.jsx';
 import { consumeChatStream } from '../utils/chatStream.js';
 
-export default function ChatWindow({ token, conversationId }) {
+export default function ChatWindow({ token, user, conversationId }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [autoCloud, setAutoCloud] = useState(false);
+  const [allowGroqDocs, setAllowGroqDocs] = useState(false);
 
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [pendingMessage, setPendingMessage] = useState(null);
   const [pendingTokenInfo, setPendingTokenInfo] = useState({ tokenCount: 0, threshold: 1000 });
 
+  const [attachedFile, setAttachedFile] = useState(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [fileError, setFileError] = useState('');
+
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,8 +58,86 @@ export default function ChatWindow({ token, conversationId }) {
     }
   }, [inputText]);
 
+  const pollDocumentStatus = (docId) => {
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/documents', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const docs = await response.json();
+          const doc = docs.find(d => d.id === docId);
+          if (doc) {
+            if (doc.status === 'ready') {
+              setAttachedFile(doc);
+              setUploadingFile(false);
+              clearInterval(interval);
+            } else if (doc.status === 'failed') {
+              setAttachedFile(doc);
+              setUploadingFile(false);
+              setFileError(doc.error_message || 'Processing failed');
+              clearInterval(interval);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error polling document status:', err);
+      }
+      attempts++;
+      if (attempts > 120) {
+        setAttachedFile(prev => prev && prev.id === docId ? { ...prev, status: 'failed', error_message: 'Processing timed out (large images can take several minutes)' } : prev);
+        setUploadingFile(false);
+        clearInterval(interval);
+      }
+    }, 3000);
+  };
+
+  const handleFileSelect = async (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setUploadingFile(true);
+      setFileError('');
+      setAttachedFile({ filename: file.name, status: 'uploading' });
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const response = await fetch('/api/documents/upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to upload document');
+        }
+
+        setAttachedFile({
+          id: data.document.id,
+          filename: data.document.filename,
+          status: 'processing'
+        });
+
+        pollDocumentStatus(data.document.id);
+      } catch (err) {
+        setFileError(err.message);
+        setAttachedFile({
+          filename: file.name,
+          status: 'failed',
+          error_message: err.message
+        });
+        setUploadingFile(false);
+      }
+    }
+  };
+
   const handleSendMessage = async (text, options = {}) => {
-    if (!text.trim() || loading) return;
+    if (!text.trim() || loading || uploadingFile) return;
 
     setLoading(true);
     setLoadingStage('Connecting…');
@@ -76,7 +160,9 @@ export default function ChatWindow({ token, conversationId }) {
           message: text,
           useCloud: options.useCloud !== undefined ? options.useCloud : autoCloud,
           forceLocal: options.forceLocal || false,
-          conversationId: conversationId
+          conversationId: conversationId,
+          allowGroqDocs: allowGroqDocs,
+          documentId: attachedFile?.status === 'ready' ? attachedFile.id : undefined
         })
       });
 
@@ -200,25 +286,53 @@ export default function ChatWindow({ token, conversationId }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <label style={{ fontSize: '0.8rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+          <label style={{ 
+            fontSize: '0.8rem', 
+            color: user?.username === 'guest' ? '#4b5563' : '#9ca3af', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '6px', 
+            cursor: user?.username === 'guest' ? 'not-allowed' : 'pointer',
+            opacity: user?.username === 'guest' ? 0.5 : 1
+          }}>
             <input
               type="checkbox"
-              checked={autoCloud}
-              onChange={(e) => setAutoCloud(e.target.checked)}
-              style={{ cursor: 'pointer' }}
+              checked={user?.username !== 'guest' && autoCloud}
+              onChange={(e) => user?.username !== 'guest' && setAutoCloud(e.target.checked)}
+              disabled={user?.username === 'guest'}
+              style={{ cursor: user?.username === 'guest' ? 'not-allowed' : 'pointer' }}
             />
             Auto Cloud Delegation (Groq)
           </label>
+          {user?.username !== 'guest' && autoCloud && (
+            <label style={{ 
+              fontSize: '0.8rem', 
+              color: '#9ca3af', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              cursor: 'pointer',
+              marginLeft: '12px'
+            }}>
+              <input
+                type="checkbox"
+                checked={allowGroqDocs}
+                onChange={(e) => setAllowGroqDocs(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              Allow Groq to read documents
+            </label>
+          )}
           <div className="badge" style={{
-            background: autoCloud ? 'rgba(99, 102, 241, 0.15)' : 'rgba(6, 182, 212, 0.15)',
-            color: autoCloud ? '#6366f1' : '#06b6d4',
-            border: `1px solid ${autoCloud ? 'rgba(99, 102, 241, 0.3)' : 'rgba(6, 182, 212, 0.3)'}`,
+            background: (user?.username !== 'guest' && autoCloud) ? 'rgba(99, 102, 241, 0.15)' : 'rgba(6, 182, 212, 0.15)',
+            color: (user?.username !== 'guest' && autoCloud) ? '#6366f1' : '#06b6d4',
+            border: `1px solid ${(user?.username !== 'guest' && autoCloud) ? 'rgba(99, 102, 241, 0.3)' : 'rgba(6, 182, 212, 0.3)'}`,
             display: 'flex',
             alignItems: 'center',
             gap: '4px'
           }}>
-            {autoCloud ? <Sparkles size={12} /> : <ShieldCheck size={12} />}
-            {autoCloud ? 'Cloud via Groq' : 'Offline (Ollama)'}
+            {(user?.username !== 'guest' && autoCloud) ? <Sparkles size={12} /> : <ShieldCheck size={12} />}
+            {user?.username === 'guest' ? 'Offline Only (Guest)' : (autoCloud ? 'Cloud via Groq' : 'Offline (Ollama)')}
           </div>
         </div>
       </div>
@@ -269,25 +383,133 @@ export default function ChatWindow({ token, conversationId }) {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="chat-input-wrapper">
-        <textarea
-          ref={textareaRef}
-          className="chat-input"
-          placeholder="Ask about materials, cost estimations, drawing numbers, or specifications..."
-          rows="1"
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={loading || streaming}
-        />
-        <button
-          className="btn btn-primary"
-          onClick={() => handleSendMessage(inputText)}
-          disabled={!inputText.trim() || loading || streaming}
-          style={{ padding: '8px 12px', borderRadius: '8px' }}
-        >
-          <Send size={16} />
-        </button>
+      <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+        {fileError && !attachedFile && (
+          <div className="chat-file-error" role="alert">
+            <AlertCircle size={14} />
+            <span>{fileError}</span>
+            <button
+              type="button"
+              onClick={() => setFileError('')}
+              aria-label="Dismiss error"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {attachedFile && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 12px',
+            background: 'rgba(31, 41, 55, 0.7)',
+            border: `1px solid ${
+              attachedFile.status === 'failed' ? 'rgba(239, 68, 68, 0.4)' : 
+              attachedFile.status === 'ready' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(59, 130, 246, 0.4)'
+            }`,
+            borderRadius: '8px',
+            marginBottom: '8px',
+            fontSize: '0.85rem',
+            alignSelf: 'flex-start',
+            maxWidth: '100%',
+            color: '#e5e7eb'
+          }}>
+            <Paperclip size={14} style={{ 
+              color: attachedFile.status === 'failed' ? '#ef4444' : 
+                     attachedFile.status === 'ready' ? '#10b981' : '#3b82f6' 
+            }} />
+            <span style={{ 
+              textOverflow: 'ellipsis', 
+              overflow: 'hidden', 
+              whiteSpace: 'nowrap',
+              maxWidth: '250px',
+              fontWeight: 500
+            }}>
+              {attachedFile.filename}
+            </span>
+            
+            {attachedFile.status === 'uploading' && (
+              <span style={{ color: '#3b82f6', fontSize: '0.75rem' }}>(Uploading...)</span>
+            )}
+            {attachedFile.status === 'processing' && (
+              <span style={{ color: '#fbbf24', fontSize: '0.75rem' }}>(Processing...)</span>
+            )}
+            {attachedFile.status === 'ready' && (
+              <span style={{ color: '#10b981', fontSize: '0.75rem' }}>(Ready - scoped to query)</span>
+            )}
+            {attachedFile.status === 'failed' && (
+              <span 
+                style={{ color: '#ef4444', fontSize: '0.75rem', cursor: 'help', display: 'flex', alignItems: 'center', gap: '3px' }}
+                title={attachedFile.error_message || 'Processing failed'}
+              >
+                <AlertCircle size={12} />
+                Failed (hover for info)
+              </span>
+            )}
+            
+            <button
+              type="button"
+              onClick={() => {
+                setAttachedFile(null);
+                setFileError('');
+                setUploadingFile(false);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#9ca3af',
+                cursor: 'pointer',
+                padding: '2px',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        <div className="chat-input-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+            disabled={loading || streaming || uploadingFile}
+          />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading || streaming || uploadingFile}
+            style={{ padding: '8px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title="Attach a file to this chat query"
+          >
+            <Paperclip size={16} />
+          </button>
+
+          <textarea
+            ref={textareaRef}
+            className="chat-input"
+            placeholder={uploadingFile ? "Uploading and processing file..." : "Ask about materials, cost estimations, drawing numbers, or specifications..."}
+            rows="1"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={loading || streaming || uploadingFile}
+            style={{ flex: 1 }}
+          />
+          <button
+            className="btn btn-primary"
+            onClick={() => handleSendMessage(inputText)}
+            disabled={!inputText.trim() || loading || streaming || uploadingFile}
+            style={{ padding: '8px 12px', borderRadius: '8px' }}
+          >
+            <Send size={16} />
+          </button>
+        </div>
       </div>
 
       {showConsentModal && (

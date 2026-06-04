@@ -26,6 +26,7 @@ $DistDest = Join-Path $BackendDest "frontend-dist"
 Copy-Item -Recurse (Join-Path $Root "frontend\dist") $DistDest
 
 Copy-Item -Recurse (Join-Path $Root "launcher") (Join-Path $OutDir "launcher")
+# Optional: place portable Node next to QS-Assistant.bat as node\node.exe
 Copy-Item (Join-Path $Root "QS-Assistant.bat") $OutDir
 Copy-Item (Join-Path $Root "backend\.env.example") (Join-Path $OutDir "app\.env.example")
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { MessageSquare, Files, LogOut, HardDrive, Plus, Trash2, Edit3, Check, X } from 'lucide-react';
 
 export default function Sidebar({ 
@@ -15,7 +15,7 @@ export default function Sidebar({
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState('');
 
-  const fetchConversations = async () => {
+  const fetchConversations = useCallback(async () => {
     if (!token) return;
     try {
       const res = await fetch('/api/chat/conversations', {
@@ -28,11 +28,11 @@ export default function Sidebar({
     } catch (err) {
       console.error('Failed to fetch conversations:', err);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     fetchConversations();
-  }, [token]);
+  }, [fetchConversations]);
 
   useEffect(() => {
     const fetchHealth = async () => {

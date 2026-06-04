@@ -3,6 +3,10 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import db from '../db.js';
 import { getJwtSecret } from '../config.js';
+import { deleteDocumentChunks } from '../services/vectorStore.js';
+import paths from '../config/paths.js';
+import fs from 'fs';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 const JWT_SECRET = getJwtSecret();
@@ -23,22 +27,11 @@ router.post('/register', async (req, res) => {
   if (!usernameRegex.test(usernameValue)) {
     return res.status(400).json({ error: 'Username can only contain alphanumeric characters, underscores, and dashes.' });
   }
-  if (passwordValue.length < 8) {
-    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (passwordValue.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
   if (passwordValue.length > 256) {
     return res.status(400).json({ error: 'Password must be 256 characters or fewer' });
-  }
-
-  const hasUppercase = /[A-Z]/.test(passwordValue);
-  const hasLowercase = /[a-z]/.test(passwordValue);
-  const hasDigit = /\d/.test(passwordValue);
-  const hasSpecial = /[^A-Za-z0-9]/.test(passwordValue);
-
-  if (!hasUppercase || !hasLowercase || !hasDigit || !hasSpecial) {
-    return res.status(400).json({
-      error: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.'
-    });
   }
 
   try {
@@ -118,6 +111,75 @@ router.post('/login', async (req, res) => {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Internal server error during login' });
   }
+});
+
+export async function deleteUserData(userId) {
+  try {
+    // Find all documents for this user
+    const docs = db.prepare('SELECT id, file_path FROM documents WHERE user_id = ?').all(userId);
+    for (const doc of docs) {
+      // Delete FTS chunks
+      try {
+        db.prepare('DELETE FROM chunks_fts WHERE document_id = ?').run(doc.id);
+      } catch (e) {
+        console.warn(`Failed to delete FTS chunks for doc ${doc.id}:`, e.message);
+      }
+
+      // Delete Chroma chunks
+      try {
+        await deleteDocumentChunks(doc.id);
+      } catch (e) {
+        console.warn(`Failed to delete Chroma chunks for doc ${doc.id}:`, e.message);
+      }
+
+      // Delete file on disk
+      try {
+        if (fs.existsSync(doc.file_path)) {
+          fs.unlinkSync(doc.file_path);
+        }
+      } catch (e) {
+        console.warn(`Failed to delete file ${doc.file_path}:`, e.message);
+      }
+    }
+
+    // Delete chat history first, then documents (and chunks via CASCADE)
+    db.prepare('DELETE FROM messages WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM conversations WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM chunks WHERE document_id IN (SELECT id FROM documents WHERE user_id = ?)').run(userId);
+    db.prepare('DELETE FROM documents WHERE user_id = ?').run(userId);
+    console.log(`[QS] Cleaned up guest data for user ID ${userId}`);
+  } catch (err) {
+    console.error(`Error during guest data cleanup for user ${userId}:`, err);
+  }
+}
+
+// Guest Login — always start with a clean slate (no prior guest history)
+router.post('/guest', async (req, res) => {
+  try {
+    await deleteUserData(9999);
+    const token = jwt.sign(
+      { id: 9999, username: 'guest' },
+      JWT_SECRET,
+      { expiresIn: '1d' }
+    );
+    res.status(200).json({
+      message: 'Logged in as guest',
+      token,
+      user: { id: 9999, username: 'guest' }
+    });
+  } catch (err) {
+    console.error('Guest login error:', err);
+    res.status(500).json({ error: 'Failed to authenticate guest' });
+  }
+});
+
+// Guest Cleanup (authenticated guest only)
+router.post('/guest-cleanup', authMiddleware, async (req, res) => {
+  if (req.user.id !== 9999 || req.user.username !== 'guest') {
+    return res.status(403).json({ error: 'Only guest sessions can request guest cleanup' });
+  }
+  await deleteUserData(9999);
+  res.status(200).json({ message: 'Guest data cleaned up' });
 });
 
 export default router;

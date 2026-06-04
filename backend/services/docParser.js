@@ -9,38 +9,114 @@ import {
   SPREADSHEET_EXTENSIONS,
   TEXT_EXTENSIONS
 } from '../config/fileTypes.js';
+import { isModelAvailable } from './ollamaModelHelper.js';
+import Tesseract from 'tesseract.js';
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL || 'http://localhost:11434';
-const OLLAMA_VISION_MODEL = process.env.OLLAMA_VISION_MODEL || 'llava';
+const OLLAMA_VISION_MODEL = process.env.OLLAMA_VISION_MODEL || 'moondream';
+const OCR_MIN_CHARS = parseInt(process.env.OCR_MIN_CHARS || '40', 10);
+const OCR_TIMEOUT_MS = parseInt(process.env.OCR_TIMEOUT_MS || '180000', 10);
+const VISION_TIMEOUT_MS = parseInt(process.env.VISION_TIMEOUT_MS || '120000', 10);
 
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+    }),
+  ]);
+}
 
-async function parseImage(filePath) {
-  const fileBuffer = await fs.readFile(filePath);
-  const base64 = fileBuffer.toString('base64');
+async function runTesseract(buffer) {
+  const result = await withTimeout(
+    Tesseract.recognize(buffer, 'eng', {
+      logger: () => {},
+      tessedit_pageseg_mode: Tesseract.PSM?.AUTO ?? '3',
+    }),
+    OCR_TIMEOUT_MS,
+    'Image OCR (Tesseract)'
+  );
+  return (result.data?.text || '').trim();
+}
 
-  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: OLLAMA_VISION_MODEL,
-      prompt:
-        'Extract all text visible in this construction or quantity surveying document image. ' +
-        'Include numbers, measurements, item descriptions, table rows, labels, and notes. ' +
-        'Output plain text only, preserving line structure where possible.',
-      images: [base64],
-      stream: false
-    })
-  });
+async function parseImageWithOllama(buffer) {
+  if (!(await isModelAvailable(OLLAMA_VISION_MODEL))) {
+    throw new Error(`Vision model "${OLLAMA_VISION_MODEL}" is not installed`);
+  }
 
-  if (!res.ok) {
-    const errText = await res.text();
+  const base64 = buffer.toString('base64');
+
+  const response = await withTimeout(
+    fetch(`${OLLAMA_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: OLLAMA_VISION_MODEL,
+        stream: false,
+        messages: [
+          {
+            role: 'user',
+            content:
+              'Extract all readable text from this construction document or Bill of Quantities (BOQ) image. ' +
+              'Return plain text only — preserve line breaks, item numbers, quantities, and units. No commentary.',
+            images: [base64],
+          },
+        ],
+      }),
+    }),
+    VISION_TIMEOUT_MS,
+    'Image OCR (Ollama vision)'
+  );
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
     throw new Error(
-      `Image OCR failed (${res.status}). Ensure Ollama is running and "${OLLAMA_VISION_MODEL}" is pulled (ollama pull ${OLLAMA_VISION_MODEL}). ${errText}`
+      `Ollama vision (${OLLAMA_VISION_MODEL}) failed (${response.status}): ${errText || response.statusText}`
     );
   }
 
-  const data = await res.json();
-  return data.response || '';
+  const data = await response.json();
+  return (data.message?.content || '').trim();
+}
+
+async function parseImage(filePath) {
+  console.log(`[docParser] OCR image: ${filePath}`);
+  const buffer = await fs.readFile(filePath);
+  let text = '';
+
+  try {
+    text = await runTesseract(buffer);
+    console.log(`[docParser] Tesseract extracted ${text.length} characters`);
+  } catch (error) {
+    console.warn(`[docParser] Tesseract failed: ${error.message}`);
+  }
+
+  if (text.length < OCR_MIN_CHARS) {
+    console.log(`[docParser] Trying Ollama vision fallback (${OLLAMA_VISION_MODEL})…`);
+    try {
+      const visionText = await parseImageWithOllama(buffer);
+      if (visionText.length > text.length) {
+        text = visionText;
+        console.log(`[docParser] Vision extracted ${text.length} characters`);
+      }
+    } catch (visionErr) {
+      if (!text) {
+        throw new Error(
+          `Image text extraction failed. Tesseract and Ollama vision could not read this file. ` +
+          `${visionErr.message}. For scanned BOQ images, run: ollama pull ${OLLAMA_VISION_MODEL}`
+        );
+      }
+      console.warn(`[docParser] Vision fallback failed, using Tesseract output: ${visionErr.message}`);
+    }
+  }
+
+  if (!text) {
+    throw new Error(
+      'No text could be extracted from this image. Try a clearer scan, higher resolution, or a PDF export.'
+    );
+  }
+
+  return text;
 }
 
 function parseSpreadsheet(fileBuffer) {
@@ -75,10 +151,7 @@ async function parseLegacyDoc(filePath) {
 }
 
 /**
- * Extracts plain text from QS document formats including images via Ollama vision.
- *
- * @param {string} filePath - Absolute path to the file.
- * @returns {Promise<string>} - Extracted text.
+ * Extracts plain text from QS document formats including images via OCR + Ollama vision.
  */
 export async function parseDocument(filePath) {
   const ext = getExtension(filePath);

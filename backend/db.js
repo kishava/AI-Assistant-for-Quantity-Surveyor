@@ -72,11 +72,46 @@ db.exec(`
   );
 `);
 
+// Ensure default guest user exists with ID 9999
+try {
+  const guestUser = db.prepare('SELECT id FROM users WHERE id = ?').get(9999);
+  if (!guestUser) {
+    db.prepare('INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)')
+      .run(9999, 'guest', '$2a$10$dummyhashguestaccountplaceholderstring');
+  }
+} catch (e) {
+  console.error('Failed to seed guest user:', e.message);
+}
+
+
 // Migration for existing databases: add conversation_id column to messages table if not exists
 try {
   db.exec("ALTER TABLE messages ADD COLUMN conversation_id TEXT NOT NULL DEFAULT 'default'");
 } catch (e) {
   // Column already exists, ignore
+}
+
+// Migration for existing databases: add error_message column to documents table if not exists
+try {
+  db.exec("ALTER TABLE documents ADD COLUMN error_message TEXT");
+} catch (e) {
+  // Column already exists, ignore
+}
+
+// Migration: conversations table for installs that predate multi-chat
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS conversations (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      provider TEXT CHECK(provider IN ('local', 'groq')) NOT NULL DEFAULT 'local',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+  `);
+} catch (e) {
+  console.warn('Conversations table migration:', e.message);
 }
 
 // Create index after column is guaranteed to exist

@@ -53,13 +53,14 @@ function BoqTable({ items }) {
   );
 }
 
-export default function DocumentChat({ document, token, onBack }) {
+export default function DocumentChat({ document, token, user, onBack }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [autoCloud] = useState(false);
+  const [allowGroqDocs, setAllowGroqDocs] = useState(false);
   const [boqItems, setBoqItems] = useState(null);
   const [boqLoading, setBoqLoading] = useState(false);
   const [boqError, setBoqError] = useState('');
@@ -106,7 +107,8 @@ export default function DocumentChat({ document, token, onBack }) {
           message: text,
           useCloud: options.useCloud !== undefined ? options.useCloud : autoCloud,
           forceLocal: options.forceLocal || false,
-          documentId: document.id
+          documentId: document.id,
+          allowGroqDocs: allowGroqDocs
         })
       });
 
@@ -311,6 +313,19 @@ export default function DocumentChat({ document, token, onBack }) {
             <Send size={16} />
           </button>
         </div>
+        {user?.username !== 'guest' && (
+          <div style={{ marginTop: '8px', paddingLeft: '4px' }}>
+            <label style={{ fontSize: '0.8rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={allowGroqDocs}
+                onChange={(e) => setAllowGroqDocs(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              Allow Groq Cloud to read document contents
+            </label>
+          </div>
+        )}
       </div>
 
       {boqLoading && (

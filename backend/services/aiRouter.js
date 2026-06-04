@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { ensureModelPulled } from './ollamaModelHelper.js';
 
 dotenv.config();
 
@@ -48,9 +49,12 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 }
 
 function writeSseToken(res, token) {
-  if (token) {
-    res.write(`data: ${token}\n\n`);
+  if (!token) return;
+  const lines = String(token).split(/\r?\n/);
+  for (const line of lines) {
+    res.write(`data: ${line}\n`);
   }
+  res.write('\n');
 }
 
 async function consumeOllamaStream(response, onToken) {
@@ -121,6 +125,7 @@ async function consumeGroqStream(response, onToken) {
 }
 
 async function streamOllama(messages, onToken) {
+  await ensureModelPulled(OLLAMA_MODEL);
   const response = await fetchWithTimeout(`${OLLAMA_URL}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

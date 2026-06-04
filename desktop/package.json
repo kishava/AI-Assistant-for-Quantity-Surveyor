@@ -1,11 +1,12 @@
 {
   "name": "qs-assistant-desktop",
   "version": "1.0.0",
-  "description": "QS Assistant desktop shell (Phase 2)",
+  "description": "QS Assistant desktop shell",
   "main": "main.js",
+  "author": "Saegis",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win"
+    "build": "electron-builder --win --dir"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -18,12 +19,39 @@
       "output": "release"
     },
     "win": {
-      "target": "nsis",
-      "icon": "icon.ico"
+      "target": [
+        "dir",
+        "nsis"
+      ],
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "QS Assistant",
+      "include": "build/installer.nsh"
+    },
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "app",
+        "to": "app",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": [
+          "node.exe"
+        ]
+      }
+    ]
   }
 }

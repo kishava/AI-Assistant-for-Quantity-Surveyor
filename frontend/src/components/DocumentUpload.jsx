@@ -3,7 +3,7 @@ import { UploadCloud, FileText, Trash2, Clock, CheckCircle, AlertCircle } from '
 import DocumentChat from './DocumentChat.jsx';
 import { ACCEPT_ATTRIBUTE, SUPPORTED_FORMATS_LABEL } from '../config/fileTypes.js';
 
-export default function DocumentUpload({ token }) {
+export default function DocumentUpload({ token, user }) {
   const [documents, setDocuments] = useState([]);
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -141,7 +141,7 @@ export default function DocumentUpload({ token }) {
   };
 
   // Get status components
-  const renderStatus = (status) => {
+  const renderStatus = (status, errorMsg) => {
     switch (status) {
       case 'processing':
         return (
@@ -159,7 +159,7 @@ export default function DocumentUpload({ token }) {
         );
       case 'failed':
         return (
-          <span className="badge badge-failed">
+          <span className="badge badge-failed" title={errorMsg || 'Unknown parsing error'}>
             <AlertCircle size={12} style={{ marginRight: '4px' }} />
             Failed
           </span>
@@ -174,6 +174,7 @@ export default function DocumentUpload({ token }) {
       <DocumentChat
         document={selectedDoc}
         token={token}
+        user={user}
         onBack={() => setSelectedDoc(null)}
       />
     );
@@ -287,7 +288,7 @@ export default function DocumentUpload({ token }) {
                       {doc.filename}
                     </td>
                     <td>{formatBytes(doc.file_size)}</td>
-                    <td>{renderStatus(doc.status)}</td>
+                    <td>{renderStatus(doc.status, doc.error_message)}</td>
                     <td>{new Date(doc.created_at).toLocaleDateString()}</td>
                     <td style={{ textAlign: 'right' }}>
                       <button

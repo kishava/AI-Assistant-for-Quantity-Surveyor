@@ -1,40 +1,73 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
+import {
+  loadStoredToken,
+  persistToken,
+  clearStoredToken,
+  cleanupGuestSession,
+  cleanupGuestOnUnload,
+  isGuestUsername,
+  isGuestToken,
+} from './utils/guestSession.js';
 
 export default function App() {
-  const [token, setToken] = useState(localStorage.getItem('qs_token') || null);
+  const [token, setToken] = useState(loadStoredToken);
   const [user, setUser] = useState(null);
+  const tokenRef = useRef(token);
 
-  // Parse token on startup to restore user context
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
+
   useEffect(() => {
     if (token) {
-      localStorage.setItem('qs_token', token);
-      
-      // Decrypt/Parse JWT locally to get username (or we can just query it, or decode payload)
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
-        setUser({ id: payload.id, username: payload.username });
+        const nextUser = { id: payload.id, username: payload.username };
+        setUser(nextUser);
+        persistToken(token, nextUser);
       } catch (e) {
         console.error('Failed to parse auth token:', e);
-        handleLogout();
+        setToken(null);
+        setUser(null);
+        clearStoredToken();
       }
     } else {
-      localStorage.removeItem('qs_token');
       setUser(null);
+      clearStoredToken();
     }
   }, [token]);
 
   const handleAuthSuccess = (newToken, newUser) => {
     setToken(newToken);
     setUser(newUser);
+    persistToken(newToken, newUser);
   };
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(async () => {
+    const currentToken = tokenRef.current;
+    if (currentToken && (isGuestUsername(user?.username) || isGuestToken(currentToken))) {
+      await cleanupGuestSession(currentToken);
+    }
     setToken(null);
     setUser(null);
-    localStorage.removeItem('qs_token');
-  };
+    clearStoredToken();
+  }, [user?.username]);
+
+  useEffect(() => {
+    const onPageHide = () => {
+      const currentToken = tokenRef.current;
+      if (currentToken && isGuestToken(currentToken)) {
+        cleanupGuestOnUnload(currentToken);
+        setToken(null);
+        setUser(null);
+      }
+    };
+
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
+  }, []);
 
   return (
     <div className="app-root-container">

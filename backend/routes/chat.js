@@ -10,7 +10,12 @@ const router = express.Router();
 const CLOUD_THRESHOLD = parseInt(process.env.CLOUD_THRESHOLD_TOKENS || '1000', 10);
 
 function writeSse(res, payload) {
-  res.write(`data: ${payload}\n\n`);
+  const text = String(payload);
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    res.write(`data: ${line}\n`);
+  }
+  res.write('\n');
 }
 
 function writeSsePrep(res) {
@@ -20,19 +25,52 @@ function writeSsePrep(res) {
   res.flushHeaders?.();
 }
 
+function searchChunksFts(message, userId, documentId, topK = 5) {
+  const terms = message
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 2)
+    .map((w) => `"${w.replace(/"/g, '""')}"`)
+    .join(' OR ');
+  if (!terms) return [];
+
+  try {
+    if (documentId) {
+      const stmt = db.prepare(`
+        SELECT f.content FROM chunks_fts f
+        WHERE chunks_fts MATCH ? AND f.document_id = ?
+        LIMIT ?
+      `);
+      return stmt.all(terms, documentId, topK).map((r) => r.content);
+    }
+    const stmt = db.prepare(`
+      SELECT f.content FROM chunks_fts f
+      INNER JOIN documents d ON d.id = f.document_id
+      WHERE chunks_fts MATCH ? AND d.user_id = ?
+      LIMIT ?
+    `);
+    return stmt.all(terms, userId, topK).map((r) => r.content);
+  } catch (err) {
+    console.warn('FTS search skipped:', err.message);
+    return [];
+  }
+}
+
 async function retrieveContext(message, userId, documentId) {
   try {
     const queryEmbedding = await embedText(message);
-    return await searchChunks(
+    const vectorResults = await searchChunks(
       queryEmbedding,
       5,
       documentId || null,
       documentId ? null : userId
     );
+    if (vectorResults.length > 0) return vectorResults;
   } catch (err) {
     console.warn('Vector search skipped:', err.message);
-    return [];
   }
+
+  return searchChunksFts(message, userId, documentId || null);
 }
 
 function buildMessages(message, history, contextChunks, documentId, userId) {
@@ -69,11 +107,24 @@ function buildMessages(message, history, contextChunks, documentId, userId) {
 }
 
 router.post('/', authMiddleware, async (req, res) => {
-  const { message, useCloud, forceLocal, documentId, conversationId } = req.body;
+  const { message, useCloud, forceLocal, documentId, conversationId, allowGroqDocs } = req.body;
   const activeConversationId = conversationId || 'default';
 
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'Message content is required' });
+  }
+
+  const isGuest = req.user.username === 'guest';
+  const canSendDocsToCloud = allowGroqDocs === true;
+
+  // 1. Guests cannot use cloud services at all
+  let finalUseCloud = isGuest ? false : !!useCloud;
+  let finalForceLocal = isGuest ? true : !!forceLocal;
+
+  // 2. Groq cloud context allowance: if not allowed to read documents and we are in a document context, force local execution (Ollama)
+  if (!canSendDocsToCloud && finalUseCloud && documentId) {
+    finalUseCloud = false;
+    finalForceLocal = true;
   }
 
   try {
@@ -86,7 +137,11 @@ router.post('/', authMiddleware, async (req, res) => {
       }
     }
 
-    const contextChunks = await retrieveContext(message, req.user.id, documentId || null);
+    // Only retrieve document chunks if NOT using cloud or if cloud doc reading is allowed
+    let contextChunks = [];
+    if (!finalUseCloud || canSendDocsToCloud) {
+      contextChunks = await retrieveContext(message, req.user.id, documentId || null);
+    }
 
     const historyStmt = db.prepare(`
       SELECT role, content FROM messages 
@@ -104,7 +159,7 @@ router.post('/', authMiddleware, async (req, res) => {
     );
 
     const tokenCount = estimateTokens(messagesToSend.map(m => m.content).join('\n'));
-    if (tokenCount >= CLOUD_THRESHOLD && !useCloud && !forceLocal) {
+    if (tokenCount >= CLOUD_THRESHOLD && !finalUseCloud && !finalForceLocal && !isGuest) {
       return res.status(200).json({
         consentRequired: true,
         tokenCount,
@@ -119,8 +174,8 @@ router.post('/', authMiddleware, async (req, res) => {
     let accumulated = '';
     const aiResult = await streamRouteQuery(
       messagesToSend,
-      !!useCloud,
-      !!forceLocal,
+      finalUseCloud,
+      finalForceLocal,
       (token) => {
         accumulated += token;
         writeSse(res, token);

@@ -32,10 +32,11 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
 
 [Run]
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\launcher\install-deps.ps1"" -Silent"; StatusMsg: "Installing Ollama, AI models, Python, and ChromaDB..."; Flags: waituntilterminated
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\launcher\stop.ps1"""; Flags: runhidden
 
 [Messages]
-WelcomeLabel2=QS Assistant requires Ollama and ChromaDB. The installer will set up the app; run ollama pull phi3:mini and chroma run separately on first use.
+WelcomeLabel2=QS Assistant will install Ollama, required AI models (phi3:mini, nomic-embed-text, moondream), Python, and ChromaDB automatically during setup. This may take several minutes and requires an internet connection.

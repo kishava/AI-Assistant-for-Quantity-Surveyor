@@ -13,3 +13,11 @@ backend/*.db-wal
 chroma_data/
 
 coverage/
+
+# Desktop / Electron build outputs (rebuild locally — do not commit)
+desktop/release/
+desktop/bin/
+desktop/app/backend/uploads/
+
+# Packaged portable output
+dist/QS-Assistant/

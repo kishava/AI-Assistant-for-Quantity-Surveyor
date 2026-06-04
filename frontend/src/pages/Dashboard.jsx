@@ -23,9 +23,9 @@ export default function Dashboard({ token, user, onLogout }) {
       {/* Main Workspace Area */}
       <main className="workspace">
         {activeTab === 'chat' ? (
-          <ChatWindow token={token} conversationId={selectedConversationId} />
+          <ChatWindow token={token} user={user} conversationId={selectedConversationId} />
         ) : (
-          <DocumentUpload token={token} />
+          <DocumentUpload token={token} user={user} />
         )}
       </main>
     </div>

@@ -567,6 +567,32 @@ input, button, textarea {
   gap: 4px;
 }
 
+.chat-file-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.chat-file-error button {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
 .chat-input-wrapper {
   margin-top: 16px;
   display: flex;

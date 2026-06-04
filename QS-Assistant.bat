@@ -1,4 +1,5 @@
 @echo off
 cd /d "%~dp0"
-powershell -NoProfile -ExecutionPolicy Bypass -File "launcher\start.ps1"
-pause
+title QS Assistant
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launcher\start.ps1"
+if errorlevel 1 pause
