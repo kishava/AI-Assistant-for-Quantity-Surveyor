@@ -571,6 +571,8 @@ input, button, textarea {
   flex-shrink: 0;
   padding: 8px 16px 16px;
   background: linear-gradient(to top, var(--bg-primary) 70%, transparent);
+  position: relative;
+  z-index: 20;
 }
 
 .chat-composer-wrap {
@@ -614,6 +616,12 @@ input, button, textarea {
   padding: 6px 8px;
   max-height: 160px;
   color: var(--text-main);
+  pointer-events: auto;
+}
+
+.chat-composer-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .chat-composer-icon-btn,
@@ -1704,6 +1712,71 @@ input, button, textarea {
 .chat-quick-prompts button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.qs-quick-prompts {
+  margin-bottom: 8px;
+}
+
+.qs-quick-prompts-compact {
+  margin-bottom: 6px;
+}
+
+.qs-quick-prompts-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+
+.qs-quick-prompts-toggle:hover {
+  background: rgba(6, 182, 212, 0.08);
+  border-color: rgba(6, 182, 212, 0.25);
+  color: var(--text-main);
+}
+
+.qs-quick-prompts-body {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: rgba(17, 24, 39, 0.5);
+}
+
+.qs-quick-prompts-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.qs-quick-tab {
+  font-size: 0.72rem;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.qs-quick-tab.active {
+  background: rgba(6, 182, 212, 0.15);
+  border-color: rgba(6, 182, 212, 0.4);
+  color: #a5f3fc;
+}
+
+.qs-quick-tab:hover {
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 /* ==========================================================================

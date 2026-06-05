@@ -7,6 +7,7 @@ import CloudConsentModal from './CloudConsentModal.jsx';
 import QsOutputPanel from './QsOutputPanel.jsx';
 import { consumeChatStream } from '../utils/chatStream.js';
 import { patchLastAssistant, replaceWorkingWithError } from '../utils/chatHelpers.js';
+import QsQuickPrompts from './QsQuickPrompts.jsx';
 
 export default function DocumentChat({ document, token, user, onBack }) {
   const [messages, setMessages] = useState([]);
@@ -235,14 +236,10 @@ export default function DocumentChat({ document, token, user, onBack }) {
               <p>
                 Use <strong>Generate QS tables</strong> above for BOQ lines, section summaries, and measurement schedules.
               </p>
-              <div className="chat-suggestions">
-                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Explain this BOQ section by section with headings and bullet points.')}>
-                  Explain BOQ
-                </button>
-                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('What are the main sections and section totals in this tender BOQ?')}>
-                  Section totals
-                </button>
-              </div>
+              <QsQuickPrompts
+                onSelect={handleSendMessage}
+                disabled={loading || streaming}
+              />
             </div>
           ) : (
             messages.map((msg, index) =>
@@ -259,6 +256,14 @@ export default function DocumentChat({ document, token, user, onBack }) {
 
         <footer className="chat-composer-area">
           <div className="chat-composer-wrap">
+            <QsQuickPrompts
+              compact
+              onSelect={(text) => {
+                setInputText(text);
+                textareaRef.current?.focus();
+              }}
+              disabled={loading || streaming}
+            />
             <ChatComposer
               textareaRef={textareaRef}
               inputText={inputText}
@@ -266,6 +271,7 @@ export default function DocumentChat({ document, token, user, onBack }) {
               onKeyDown={handleKeyDown}
               onSend={() => handleSendMessage(inputText)}
               showAttach={false}
+              inputDisabled={loading || streaming}
               sendDisabled={!inputText.trim() || loading || streaming}
               placeholder="Ask about this document…"
             />

@@ -29,6 +29,30 @@ export const QS_OUTPUT_TYPES = {
     label: 'Rate analysis outline',
     description: 'Rate build-up structure where rates are shown',
   },
+  preliminaries: {
+    label: 'Preliminaries & general',
+    description: 'Preliminaries, site overheads, and general items',
+  },
+  provisional_sums: {
+    label: 'Provisional sums',
+    description: 'Provisional sum items with scope description and amounts',
+  },
+  payment_certificate: {
+    label: 'Interim payment lines',
+    description: 'BOQ lines structured for interim payment certification',
+  },
+  variation_register: {
+    label: 'Variation register',
+    description: 'Potential variations, omissions, and change items',
+  },
+  material_takeoff: {
+    label: 'Material take-off',
+    description: 'Materials with unit, quantity, and waste allowance notes',
+  },
+  drawing_queries: {
+    label: 'Drawing / RFI queries',
+    description: 'Queries a QS should raise before final measurement',
+  },
 };
 
 const JSON_SCHEMA_HINT = `Return ONLY valid JSON (no markdown fences). Schema:
@@ -62,6 +86,18 @@ function promptForType(type, docLabel, documentText, hint) {
       'QS verification checklist from the document. Columns: #, Check item, Reference (clause/item), Priority (High/Med/Low), Status (Open).',
     rate_analysis:
       'Outline rate build-ups where rates appear. Columns: Item, Unit, Rate, Likely components, Notes.',
+    preliminaries:
+      'List preliminaries and general items. Columns: Item, Description, Unit/Basis, Qty or %, Amount (SAR/AED), Notes.',
+    provisional_sums:
+      'List provisional sums. Columns: Item, Description, Amount, Scope included, Risk/Notes.',
+    payment_certificate:
+      'Lines for interim payment. Columns: Item, Description, Unit, Contract qty, Previous %, This period qty, Rate, Amount.',
+    variation_register:
+      'Variation / change register. Columns: Ref, Description, Type (Add/Omit), Est. qty, Unit, Est. value, Status.',
+    material_takeoff:
+      'Material take-off. Columns: Material, Specification, Unit, Net qty, Waste %, Total qty, Notes.',
+    drawing_queries:
+      'Drawing and RFI queries. Columns: #, Query, Drawing ref, Trade, Priority, Impact on BOQ.',
   };
 
   const instruction = typeInstructions[type] || typeInstructions.boq_line_items;
