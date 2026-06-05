@@ -160,12 +160,6 @@ if ($ok) {
 Write-Host "========================================`n" -ForegroundColor Cyan
 
 if ($ok) {
-    Write-Host "`n=== Phase 6: Share package for testers ===" -ForegroundColor Cyan
-    $ShareScript = Join-Path $PSScriptRoot "package-share.ps1"
-    if (Test-Path $ShareScript) {
-        & $ShareScript -Root $Root
-    }
-
     $BuildInfoPath = Join-Path $ReleaseRoot "build-info.json"
     $buildInfo = @{
         version     = $BuildVersion
@@ -174,6 +168,12 @@ if ($ok) {
         installer   = "desktop/release/QS-Assistant-Setup.exe"
     } | ConvertTo-Json -Depth 3
     Set-Content -Path $BuildInfoPath -Value $buildInfo -Encoding UTF8
+
+    Write-Host "`n=== Phase 6: Share package for testers ===" -ForegroundColor Cyan
+    $ShareScript = Join-Path $PSScriptRoot "package-share.ps1"
+    if (Test-Path $ShareScript) {
+        & $ShareScript -Root $Root
+    }
 }
 
 if (-not $ok) { exit 1 }

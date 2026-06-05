@@ -1,6 +1,6 @@
 {
   "name": "qs-ai-backend",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Offline-first RAG AI assistant backend for Quantity Surveyors",
   "main": "server.js",
   "type": "module",

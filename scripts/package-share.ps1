@@ -29,6 +29,11 @@ if (-not (Test-Path $InstallerSrc)) {
 
 $version = "1.0.0"
 $builtAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm UTC")
+$DesktopPkg = Join-Path $Root "desktop\package.json"
+if (Test-Path $DesktopPkg) {
+    $pkg = Get-Content $DesktopPkg -Raw | ConvertFrom-Json
+    if ($pkg.version) { $version = $pkg.version }
+}
 if (Test-Path $BuildInfoPath) {
     $info = Get-Content $BuildInfoPath -Raw | ConvertFrom-Json
     if ($info.version) { $version = $info.version }
