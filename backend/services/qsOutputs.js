@@ -2,6 +2,8 @@
  * Structured QS artifacts: tables, summaries, schedules for quantity surveyors.
  */
 
+import { REGION_CURRENCY_PROMPT } from './qsRegion.js';
+
 export const QS_OUTPUT_TYPES = {
   boq_line_items: {
     label: 'BOQ line items',
@@ -41,7 +43,8 @@ const JSON_SCHEMA_HINT = `Return ONLY valid JSON (no markdown fences). Schema:
   ],
   "notes": ["optional short notes for the QS"]
 }
-Use "—" for missing values. Copy numbers exactly from the document.`;
+Use "—" for missing values. Copy numbers exactly from the document.
+For new estimates (not in document), use SAR unless UAE/AED is specified.`;
 
 function promptForType(type, docLabel, documentText, hint) {
   const extra = hint ? `\nUser focus: ${hint}` : '';
@@ -89,7 +92,8 @@ export function buildGenerateMessages(type, documentText, docLabel, hint = '') {
       {
         role: 'system',
         content:
-          'You are a QS assistant. Output valid JSON only. Never invent figures — use "—" when data is missing.',
+          'You are a QS assistant for Gulf / GCC projects. Output valid JSON only. Never invent figures — use "—" when data is missing.\n' +
+          REGION_CURRENCY_PROMPT,
       },
       {
         role: 'user',

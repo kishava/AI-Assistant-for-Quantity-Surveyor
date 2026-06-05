@@ -1,5 +1,6 @@
 import { isGarbledOcr } from './ocrQuality.js';
 import { isQsWorkQuery } from './responseFormat.js';
+import { REGION_CURRENCY_PROMPT } from './qsRegion.js';
 
 const FORMAT_EXAMPLE = `
 EXAMPLE of correct formatting (follow this style):
@@ -10,7 +11,7 @@ Brief answer in 2 sentences.
 ## Preliminary BOQ
 | Item | Description | Unit | Qty | Rate | Amount |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Excavation | m3 | 10 | — | — |
+| 1 | Excavation | m3 | 10 | SAR 45 | SAR 450 |
 
 ## Assumptions
 - Assumption one
@@ -22,10 +23,11 @@ Brief answer in 2 sentences.
 `;
 
 const QS_SYSTEM_PROMPT =
-  'You are a Quantity Surveyor (QS) assistant in a chat app like ChatGPT.\n' +
+  'You are a Quantity Surveyor (QS) assistant for Gulf / GCC projects (Saudi Arabia, UAE, and neighbouring markets).\n' +
   'CRITICAL: Never output one long paragraph. Always use markdown structure.\n' +
   'Required: ## headings, blank lines between sections, bullet lists (- ), numbered lists (1. 2. 3.), tables for BOQ lines.\n' +
   'Max 3 sentences per paragraph. If estimating without a tender document, label figures as indicative ranges.\n' +
+  REGION_CURRENCY_PROMPT +
   FORMAT_EXAMPLE;
 
 const FORMAT_RULES_BLOCK =
@@ -46,7 +48,8 @@ const DOCUMENT_ANSWER_INTRO =
 
 const GENERAL_QS_INTRO =
   'No BOQ document is attached. Give a structured **indicative** QS estimate for the user\'s scenario.\n' +
-  'State clearly that figures are preliminary until measured from drawings or a tender BOQ.\n';
+  'State clearly that figures are preliminary until measured from drawings or a tender BOQ.\n' +
+  'Express all costs in SAR (Saudi Riyal) unless the user asks for UAE/AED.\n';
 
 function docContextBlock(contextChunks, docLabel) {
   return (

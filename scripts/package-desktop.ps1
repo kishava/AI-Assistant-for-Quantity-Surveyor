@@ -160,6 +160,12 @@ if ($ok) {
 Write-Host "========================================`n" -ForegroundColor Cyan
 
 if ($ok) {
+    Write-Host "`n=== Phase 6: Share package for testers ===" -ForegroundColor Cyan
+    $ShareScript = Join-Path $PSScriptRoot "package-share.ps1"
+    if (Test-Path $ShareScript) {
+        & $ShareScript -Root $Root
+    }
+
     $BuildInfoPath = Join-Path $ReleaseRoot "build-info.json"
     $buildInfo = @{
         version     = $BuildVersion

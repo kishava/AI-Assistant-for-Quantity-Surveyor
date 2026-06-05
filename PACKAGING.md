@@ -35,6 +35,23 @@ Each successful `npm run dist` **bumps the patch version** (e.g. 1.0.0 → 1.0.1
 
 Build metadata: `desktop\release\build-info.json`
 
+## Share with a QS tester
+
+After `npm run dist`, a ready-to-zip folder is created automatically:
+
+```
+dist\QS-Assistant-Share\
+  README.md
+  Installer\QS-Assistant-Setup.exe
+  Portable\QS Assistant.exe  (+ supporting files)
+```
+
+Or run manually: `npm run share`
+
+Zip **QS-Assistant-Share** and send via Google Drive, WeTransfer, etc.
+
+**Gulf defaults:** chat estimates use **SAR**; testers can ask for **AED** in questions for UAE projects.
+
 Requires: Node.js in PATH, `npm install` in `desktop/` (for electron-builder).
 
 ## Run Electron shell in dev
