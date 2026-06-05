@@ -133,10 +133,7 @@ async function areDependenciesInstalled() {
 
 function updateSplashStatus(text) {
   if (!splashWindow || splashWindow.isDestroyed()) return;
-  const safe = String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  splashWindow.webContents.executeJavaScript(
-    `document.querySelector('p').textContent = '${safe}';`
-  ).catch(() => {});
+  splashWindow.webContents.send('splash-status', String(text));
 }
 
 function runDependencyEnsure(options = {}) {
@@ -299,34 +296,23 @@ async function startServicesIfNeeded() {
 
 function createSplashWindow() {
   splashWindow = new BrowserWindow({
-    width: 420,
-    height: 260,
+    width: 480,
+    height: 320,
     frame: false,
-    transparent: true,
     resizable: false,
     alwaysOnTop: true,
-    webPreferences: { nodeIntegration: false, contextIsolation: true },
+    center: true,
+    backgroundColor: '#0b0f19',
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'splash-preload.js'),
+    },
   });
 
-  const html = `
-  <html>
-  <head><style>
-    body { margin:0; font-family:'Segoe UI',sans-serif; display:flex; align-items:center;
-           justify-content:center; height:100vh; background:rgba(15,15,25,0.92);
-           border-radius:18px; color:#fff; flex-direction:column; user-select:none; }
-    h2   { margin:0 0 8px; font-size:22px; font-weight:600; }
-    p    { margin:0; font-size:13px; color:#aaa; }
-    .loader { margin-top:22px; width:38px; height:38px; border:3px solid #333;
-              border-top-color:#6c63ff; border-radius:50%; animation:spin .8s linear infinite; }
-    @keyframes spin { to { transform:rotate(360deg); } }
-  </style></head>
-  <body>
-    <h2>QS Assistant</h2>
-    <p>Starting up…</p>
-    <div class="loader"></div>
-  </body></html>`;
-
-  splashWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+  splashWindow.once('ready-to-show', () => splashWindow?.show());
+  splashWindow.loadFile(path.join(__dirname, 'splash.html'));
 }
 
 /* ─── Backend lifecycle ─── */
@@ -473,20 +459,22 @@ app.whenReady().then(async () => {
   createSplashWindow();
 
   try {
-    updateSplashStatus('Checking services…');
-    await runDependencyEnsure({ quickStart: true, timeoutMs: 45000 });
-
-    updateSplashStatus('Starting Ollama & ChromaDB…');
-    await startServicesIfNeeded();
-
-    updateSplashStatus('Starting QS Assistant…');
+    updateSplashStatus('Starting backend…');
     if (!startBackend()) return;
 
+    updateSplashStatus('Checking dependencies…');
+    const depsPromise = runDependencyEnsure({ quickStart: true, timeoutMs: 20000 });
+
+    updateSplashStatus('Starting local services…');
+    const servicesPromise = startServicesIfNeeded();
+
+    await Promise.all([depsPromise, servicesPromise]);
+
+    updateSplashStatus('Opening workspace…');
     await waitForHealth(90);
     createWindow();
     try { createTray(); } catch { /* optional */ }
 
-    // Pull models after UI is up (first-time setup can take a while)
     pullModelsInBackground();
   } catch (err) {
     if (splashWindow) { splashWindow.close(); splashWindow = null; }

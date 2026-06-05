@@ -50,28 +50,65 @@ if ($LocalNode) {
 }
 
 Write-Host "`n=== Phase 4: electron-builder (portable + installer) ===" -ForegroundColor Cyan
+Write-Host "  Stopping any running QS Assistant instances..." -ForegroundColor Gray
+Get-Process -Name "QS Assistant" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+
+$EbOutputRel = "release"
+$ReleaseCleared = $false
 if (Test-Path $ReleaseDir) {
     try {
-        Remove-Item (Join-Path $ReleaseDir "*") -Recurse -Force -ErrorAction SilentlyContinue
-        Remove-Item $ReleaseDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item (Join-Path $ReleaseDir "*") -Recurse -Force -ErrorAction Stop
+        Remove-Item $ReleaseDir -Recurse -Force -ErrorAction Stop
+        $ReleaseCleared = $true
     } catch {
-        Write-Host "  Warning: could not clear release folder - close QS Assistant if running" -ForegroundColor Yellow
+        $Stamp = Get-Date -Format "yyyyMMddHHmmss"
+        Write-Host "  Release folder locked - moving to stale backup..." -ForegroundColor Yellow
+        try {
+            Rename-Item -LiteralPath $ReleaseDir -NewName "win-unpacked.stale.$Stamp" -ErrorAction Stop
+            $ReleaseCleared = $true
+        } catch {
+            $EbOutputRel = "release\build-$Stamp"
+            $ReleaseDir = Join-Path $Root "desktop\$EbOutputRel\win-unpacked"
+            Write-Host "  Using alternate build folder: desktop\$EbOutputRel" -ForegroundColor Yellow
+        }
     }
 }
 Push-Location (Join-Path $Root "desktop")
-npx electron-builder --win
+npx electron-builder --win --config.directories.output=$EbOutputRel
+$BuilderExit = $LASTEXITCODE
 Pop-Location
+if ($BuilderExit -ne 0) {
+    Write-Host "  ERROR: electron-builder failed (exit $BuilderExit). Portable may be incomplete." -ForegroundColor Red
+    exit 1
+}
 
 Write-Host "`n=== Phase 5: Verify outputs ===" -ForegroundColor Cyan
 $PortableExe = Join-Path $ReleaseDir "QS Assistant.exe"
 $NodeExeDest = Join-Path $ReleaseDir "resources\bin\node.exe"
 $SetupExe = Get-ChildItem (Join-Path $Root "desktop\release") -Filter "QS Assistant Setup*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
 
+$PackBackend = Join-Path $ReleaseDir "resources\app\backend\server.js"
+$PackStartProd = Join-Path $ReleaseDir "resources\app\backend\start-prod.js"
+$PackFrontend = Join-Path $ReleaseDir "resources\app\backend\frontend-dist\index.html"
+
 $ok = $true
 if (Test-Path $PortableExe) {
     Write-Host "  Portable: $PortableExe" -ForegroundColor Green
 } else {
     Write-Host "  ERROR: Portable exe missing" -ForegroundColor Red
+    $ok = $false
+}
+if (-not (Test-Path $PackBackend)) {
+    Write-Host "  ERROR: Packaged backend missing server.js - build is corrupt" -ForegroundColor Red
+    $ok = $false
+}
+if (-not (Test-Path $PackStartProd)) {
+    Write-Host "  ERROR: Packaged backend missing start-prod.js" -ForegroundColor Red
+    $ok = $false
+}
+if (-not (Test-Path $PackFrontend)) {
+    Write-Host "  ERROR: Packaged frontend-dist missing" -ForegroundColor Red
     $ok = $false
 }
 if (Test-Path $NodeExeDest) {
@@ -82,7 +119,7 @@ if (Test-Path $NodeExeDest) {
 }
 if ($SetupExe) {
     $sizeMb = [math]::Round($SetupExe.Length / 1MB, 1)
-    Write-Host "  Installer: $($SetupExe.FullName) (${sizeMb} MB)" -ForegroundColor Green
+    Write-Host "  Installer: $($SetupExe.FullName) ($sizeMb MB)" -ForegroundColor Green
     $DistInstaller = Join-Path $Root "dist\installer"
     New-Item -ItemType Directory -Force -Path $DistInstaller | Out-Null
     Copy-Item $SetupExe.FullName (Join-Path $DistInstaller "QS-Assistant-Setup.exe") -Force
@@ -95,7 +132,7 @@ if ($SetupExe) {
 Write-Host "`n========================================" -ForegroundColor $(if ($ok) { "Green" } else { "Yellow" })
 if ($ok) {
     Write-Host "  BUILD COMPLETE (portable + installer)" -ForegroundColor Green
-    Write-Host "  Portable:  desktop\release\win-unpacked\QS Assistant.exe" -ForegroundColor Green
+    Write-Host "  Portable:  $PortableExe" -ForegroundColor Green
     Write-Host "  Installer: dist\installer\QS-Assistant-Setup.exe" -ForegroundColor Green
 } else {
     Write-Host "  BUILD FINISHED WITH WARNINGS - check output above" -ForegroundColor Yellow
