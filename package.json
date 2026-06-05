@@ -1,6 +1,6 @@
 {
   "name": "qs-ai",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "type": "module",
   "description": "QS AI Assistant — run backend and frontend together",
@@ -18,8 +18,7 @@
     "desktop:sync:fast": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-desktop-app.ps1",
     "desktop:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-desktop.ps1",
     "dist": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-desktop.ps1",
-    "share": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-share.ps1",
-    "dist:share": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-desktop.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-share.ps1"
+    "share": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-share.ps1"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

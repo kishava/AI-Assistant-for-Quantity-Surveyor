@@ -2,6 +2,12 @@
 setlocal enabledelayedexpansion
 
 set MSG=%~1
+set SKIP_DIST=0
+
+if /i "%~2"=="skip-dist" set SKIP_DIST=1
+if /i "%~3"=="skip-dist" set SKIP_DIST=1
+if /i "%~2"=="nodist" set SKIP_DIST=1
+if /i "%~3"=="nodist" set SKIP_DIST=1
 
 if "%MSG%"=="" (
   for /f "delims=" %%i in ('node "%~dp0.cursor\hooks\generate-commit-msg.js"') do set MSG=%%i
@@ -9,7 +15,7 @@ if "%MSG%"=="" (
 
 if "%MSG%"=="" set MSG=chore: auto-commit task changes
 
-REM Keep portable + installer source bundle aligned with backend/frontend/launcher
+REM 1) Sync sources into desktop\app (portable + installer bundle input)
 echo Syncing desktop portable + installer sources...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\sync-desktop-app.ps1" -BuildFrontend -Quiet
 if %ERRORLEVEL% neq 0 (
@@ -17,19 +23,19 @@ if %ERRORLEVEL% neq 0 (
   exit /b 1
 )
 
-if /i "%~2"=="dist" goto do_dist
-if /i "%~3"=="dist" goto do_dist
-goto after_dist
-
-:do_dist
-echo Building portable + installer (electron-builder)...
-call npm run dist
-if %ERRORLEVEL% neq 0 (
-  echo dist build failed.
-  exit /b 1
+REM 2) Always rebuild portable + installer so both stay current (use skip-dist to opt out)
+if %SKIP_DIST%==0 (
+  echo Building portable + installer + share package...
+  call npm run dist
+  if %ERRORLEVEL% neq 0 (
+    echo dist build failed. Close QS Assistant / File Explorer on desktop\release and retry.
+    echo Or commit without rebuild: commit.bat "your message" skip-dist
+    exit /b 1
+  )
+) else (
+  echo Skipped dist build ^(skip-dist^).
 )
 
-:after_dist
 git add -A
 
 git diff --cached --quiet

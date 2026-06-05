@@ -19,11 +19,19 @@ npm run desktop:sync
 
 ## Build portable + installer together
 
-Single command builds **both** outputs from the same `desktop\app` bundle:
+**Every `commit.bat` run rebuilds both** (no extra `dist` flag needed):
+
+```powershell
+commit.bat "feat: your change"
+```
+
+Manual rebuild without committing:
 
 ```powershell
 npm run dist
 ```
+
+Skip rebuild (e.g. docs-only): `commit.bat "docs: readme" skip-dist`
 
 | Output | Path |
 |--------|------|

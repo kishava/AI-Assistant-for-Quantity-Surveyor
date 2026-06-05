@@ -7,16 +7,21 @@ alwaysApply: true
 
 After completing **any** code change, fix, or feature — no exceptions:
 
-0. If you changed `backend/`, `frontend/`, `launcher/`, or `desktop/`: `commit.bat` syncs `desktop\app\` automatically. If the user is working on portable/installer, also run `npm run dist` to compile both.
 1. Run `commit.bat` with a short conventional message:
    ```
    commit.bat "feat: brief description of what changed"
    ```
-2. Use prefixes: `feat:` (features), `fix:` (bugs), `style:` (UI/CSS), `docs:` (README), `chore:` (config/hooks).
-3. If no custom message is needed, run `commit.bat` with no arguments — it auto-generates one.
-4. `commit.bat` automatically runs `git push origin HEAD` after each successful commit.
-5. Do **not** skip the commit/push. Do **not** wait for the user to ask.
-6. Do **not** commit secrets (`.env`, credentials). These are gitignored.
-7. One commit per logical task. If you finish multiple distinct tasks in one session, commit after each one.
+2. `commit.bat` automatically:
+   - Syncs `desktop\app\` from backend/frontend/launcher
+   - **Rebuilds portable + installer** (`npm run dist`) — both stay current
+   - Refreshes `dist\QS-Assistant-Share\` for testers
+   - Commits and pushes
+3. Use prefixes: `feat:`, `fix:`, `style:`, `docs:`, `chore:`.
+4. If no custom message, run `commit.bat` with no arguments.
+5. Do **not** skip commit/push. Do **not** wait for the user to ask.
+6. Do **not** commit secrets (`.env`, credentials).
+7. One commit per logical task.
 
-The Cursor `stop` hook also commits and pushes any leftover changes when the agent session ends.
+**Opt out of rebuild** (locked folder, docs-only): `commit.bat "docs: x" skip-dist`
+
+Do **not** run `npm run dist` separately unless testing without committing.

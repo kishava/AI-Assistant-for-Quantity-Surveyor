@@ -9,30 +9,40 @@ globs:
 alwaysApply: false
 ---
 
-# Desktop portable + installer (develop together)
+# Desktop portable + installer (always rebuild together)
 
 The **only** bundled app tree is `desktop\app\`. It is rebuilt from root sources — never edit `desktop\app\` by hand.
 
-| Command | When | Output |
-|---------|------|--------|
-| `npm run desktop:sync` | After backend/frontend/launcher changes (runs automatically in `commit.bat`) | Updates `desktop\app\` |
-| `npm run dist` | When user tests portable/installer or asks to package | Portable + installer together |
+## On every code change
 
-## After code changes
+`commit.bat` **always** (by default):
 
-1. `commit.bat` runs `sync-desktop-app.ps1` automatically.
-2. If the user mentions **portable**, **installer**, **desktop**, or **distribution**, also run:
-   ```powershell
-   npm run dist
-   ```
-   This builds **both**:
-   - Portable: `desktop\release\win-unpacked\QS Assistant.exe`
-   - Installer: `dist\installer\QS-Assistant-Setup.exe`
+1. Syncs `backend/`, `frontend/dist`, `launcher/` → `desktop/app/`
+2. Runs `npm run dist` → rebuilds **portable + installer + share folder**
+3. Commits and pushes
+
+You do **not** need a separate `dist` argument. Every edit that ends in `commit.bat` updates both builds.
+
+| Output | Path |
+|--------|------|
+| Portable | `desktop\release\win-unpacked\QS Assistant.exe` |
+| Installer | `desktop\release\QS-Assistant-Setup.exe` |
+| Share zip source | `dist\QS-Assistant-Share\` |
+
+## Manual commands
+
+| Command | When |
+|---------|------|
+| `npm run desktop:sync` | Sync only, no electron build (rare) |
+| `npm run dist` | Rebuild portable + installer without committing |
+| `npm run share` | Refresh share folder from existing release |
+| `commit.bat "msg" skip-dist` | Commit without rebuilding (docs-only / broken lock) |
 
 ## Do not use stale paths
 
 - Do **not** rely on committed files under `desktop\app\` (gitignored).
-- Legacy `scripts\package-windows.ps1` + Inno `installer\QS-Assistant.iss` are optional; primary path is **electron-builder** (`npm run dist`).
+- Do **not** hand-edit `desktop\release\` — it is overwritten each `commit.bat`.
+- Legacy Inno `installer\QS-Assistant.iss` is optional; primary path is electron-builder.
 
 ## Source of truth
 
