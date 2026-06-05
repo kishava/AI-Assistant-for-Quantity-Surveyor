@@ -9,6 +9,7 @@ import { patchLastAssistant, replaceWorkingWithError } from '../utils/chatHelper
 import QsOutputPanel from './QsOutputPanel.jsx';
 import { ACCEPT_ATTRIBUTE } from '../config/fileTypes.js';
 import { friendlyDocError } from '../utils/userMessages.js';
+import QsQuickPrompts from './QsQuickPrompts.jsx';
 
 export default function ChatWindow({ token, user, conversationId }) {
   const [messages, setMessages] = useState([]);
@@ -63,6 +64,17 @@ export default function ChatWindow({ token, user, conversationId }) {
 
     fetchHistory();
   }, [token, conversationId]);
+
+  useEffect(() => {
+    setStreaming(false);
+    setLoading(false);
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!historyLoading && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [historyLoading, conversationId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -415,18 +427,11 @@ export default function ChatWindow({ token, user, conversationId }) {
                 <MessageSquarePlaceholder />
               </div>
               <h3>How can I help with your BOQ today?</h3>
-              <p>Upload a file under <strong>Documents</strong>, attach it with the paperclip, or try a starter question below.</p>
-              <div className="chat-suggestions">
-                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Give a structured preliminary BOQ for a small generator room 12 ft x 8 ft with headings and a table.')}>
-                  Generator room BOQ
-                </button>
-                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('Summarise earthwork and disposal with quantities and amounts in sections.')}>
-                  Earthwork summary
-                </button>
-                <button type="button" disabled={loading || streaming} onClick={() => handleSendMessage('List concrete items with unit, qty, rate and amount in a table.')}>
-                  Concrete &amp; formwork
-                </button>
-              </div>
+              <p>Upload a file under <strong>Documents</strong>, attach it with the paperclip, or pick a QS prompt below.</p>
+              <QsQuickPrompts
+                onSelect={handleSendMessage}
+                disabled={loading || streaming || uploadingFile}
+              />
             </div>
           ) : (
             messages.map((msg, index) =>
@@ -543,6 +548,14 @@ export default function ChatWindow({ token, user, conversationId }) {
               accept={ACCEPT_ATTRIBUTE}
               disabled={loading || streaming || uploadingFile}
             />
+            <QsQuickPrompts
+              compact
+              onSelect={(text) => {
+                setInputText(text);
+                textareaRef.current?.focus();
+              }}
+              disabled={loading || streaming || uploadingFile}
+            />
             <ChatComposer
               textareaRef={textareaRef}
               inputText={inputText}
@@ -551,6 +564,7 @@ export default function ChatWindow({ token, user, conversationId }) {
               onSend={() => handleSendMessage(inputText)}
               onAttach={() => fileInputRef.current?.click()}
               attachDisabled={loading || streaming || uploadingFile}
+              inputDisabled={loading || streaming || uploadingFile}
               sendDisabled={!inputText.trim() || loading || streaming || uploadingFile}
               placeholder={
                 uploadingFile

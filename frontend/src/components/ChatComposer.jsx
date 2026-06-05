@@ -10,6 +10,7 @@ export default function ChatComposer({
   onAttach,
   attachDisabled,
   sendDisabled,
+  inputDisabled = false,
   placeholder,
   showAttach = true,
   children,
@@ -38,7 +39,8 @@ export default function ChatComposer({
           value={inputText}
           onChange={onInputChange}
           onKeyDown={onKeyDown}
-          disabled={sendDisabled && !inputText}
+          disabled={inputDisabled}
+          aria-label="Message QS Assistant"
         />
         <button
           type="button"
