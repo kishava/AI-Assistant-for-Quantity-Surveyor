@@ -1,6 +1,6 @@
 {
   "name": "qs-assistant-desktop",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "QS Assistant desktop shell",
   "main": "main.js",
   "author": "Saegis",
@@ -23,7 +23,8 @@
         "dir",
         "nsis"
       ],
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "artifactName": "QS-Assistant-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,

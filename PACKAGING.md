@@ -28,7 +28,12 @@ npm run dist
 | Output | Path |
 |--------|------|
 | **Portable** | `desktop\release\win-unpacked\QS Assistant.exe` |
-| **Installer** | `dist\installer\QS-Assistant-Setup.exe` |
+| **Installer** | `desktop\release\QS-Assistant-Setup.exe` |
+| **Installer (mirror)** | `dist\installer\QS-Assistant-Setup.exe` |
+
+Each successful `npm run dist` **bumps the patch version** (e.g. 1.0.0 → 1.0.1) in all `package.json` files, **overwrites** the portable and installer at the paths above, and **deletes** stale `build-*` folders, `.blockmap`, and `builder-*.yml` files from `desktop\release\`.
+
+Build metadata: `desktop\release\build-info.json`
 
 Requires: Node.js in PATH, `npm install` in `desktop/` (for electron-builder).
 

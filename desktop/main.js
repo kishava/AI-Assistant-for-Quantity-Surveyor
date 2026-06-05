@@ -417,7 +417,7 @@ function createWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    title: 'QS Assistant',
+    title: `QS Assistant v${app.getVersion()}`,
     show: false,
     webPreferences: {
       nodeIntegration: false,
