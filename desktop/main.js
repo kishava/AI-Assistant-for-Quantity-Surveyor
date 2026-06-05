@@ -131,66 +131,178 @@ async function areDependenciesInstalled() {
   return ollama && chroma;
 }
 
+const depsStatusPath = () => path.join(appDataDir, 'deps-status.json');
+
 function updateSplashStatus(text) {
   if (!splashWindow || splashWindow.isDestroyed()) return;
   splashWindow.webContents.send('splash-status', String(text));
 }
 
-function runDependencyEnsure(options = {}) {
-  const { quickStart = true, timeoutMs = 45000 } = options;
-  return new Promise((resolve) => {
-    const scriptPath = getLauncherScriptPath('check-deps.ps1');
+function updateSplashHint(text) {
+  if (!splashWindow || splashWindow.isDestroyed()) return;
+  splashWindow.webContents.send('splash-hint', String(text || ''));
+}
+
+function updateSplashLog(text) {
+  if (!splashWindow || splashWindow.isDestroyed()) return;
+  splashWindow.webContents.send('splash-log', String(text));
+}
+
+function readDepsStatus() {
+  try {
+    if (fs.existsSync(depsStatusPath())) {
+      return JSON.parse(fs.readFileSync(depsStatusPath(), 'utf8'));
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function runPowerShellScript(scriptName, scriptArgs, options = {}) {
+  return new Promise((resolve, reject) => {
+    const scriptPath = getLauncherScriptPath(scriptName);
     if (process.platform !== 'win32' || !fs.existsSync(scriptPath)) {
-      return resolve();
+      return resolve({ code: 0, stdout: '' });
     }
 
-    console.log('[QS] Quick dependency check…');
-    const args = [
+    const proc = spawn('powershell.exe', [
       '-NoProfile', '-ExecutionPolicy', 'Bypass',
-      '-File', scriptPath, '-Quiet',
-    ];
-    if (quickStart) {
-      args.push('-QuickStart');
-    } else {
-      args.push('-InstallIfMissing', '-PullModels');
+      '-File', scriptPath,
+      ...scriptArgs,
+    ], { windowsHide: options.hideWindow !== false });
+
+    let stdout = '';
+    proc.stdout.on('data', (chunk) => {
+      const text = chunk.toString();
+      stdout += text;
+      if (options.onProgress) {
+        text.split(/\r?\n/).forEach((line) => {
+          const trimmed = line.trim();
+          if (trimmed.includes('[QS_PROGRESS]')) {
+            options.onProgress(trimmed.replace(/\[QS_PROGRESS\]/g, '').trim());
+          }
+        });
+      }
+    });
+    proc.stderr.on('data', (d) => console.error('[deps]', d.toString().trim()));
+
+    if (options.timeoutMs) {
+      setTimeout(() => {
+        try { proc.kill(); } catch { /* ignore */ }
+      }, options.timeoutMs);
     }
 
-    const proc = spawn('powershell.exe', args, { windowsHide: true });
-    let settled = false;
-    const done = () => {
-      if (settled) return;
-      settled = true;
-      resolve();
-    };
-
-    const timer = setTimeout(() => {
-      console.warn('[QS] Dependency check timed out — continuing startup.');
-      try { proc.kill(); } catch { /* ignore */ }
-      done();
-    }, timeoutMs);
-
-    proc.on('close', () => { clearTimeout(timer); done(); });
-    proc.on('error', () => { clearTimeout(timer); done(); });
+    proc.on('close', (code) => resolve({ code: code ?? 1, stdout }));
+    proc.on('error', (err) => reject(err));
   });
 }
 
-function pullModelsInBackground() {
-  const flagFile = path.join(appDataDir, 'deps-bootstrap.done');
-  if (fs.existsSync(flagFile)) return;
-
-  const scriptPath = getLauncherScriptPath('install-deps.ps1');
-  if (!fs.existsSync(scriptPath)) return;
-
+async function runDepsReport() {
+  const { stdout } = await runPowerShellScript('check-deps.ps1', ['-ReportOnly', '-Json', '-Quiet']);
+  const line = stdout.trim().split('\n').filter((l) => l.trim().startsWith('{')).pop();
+  if (!line) {
+    return { ok: false, needsInstall: true, issues: ['Could not read dependency status'] };
+  }
   try {
-    fs.mkdirSync(appDataDir, { recursive: true });
-    fs.writeFileSync(flagFile, new Date().toISOString());
-  } catch { /* ignore */ }
+    return JSON.parse(line);
+  } catch {
+    return { ok: false, needsInstall: true, issues: ['Could not parse dependency status'] };
+  }
+}
 
-  console.log('[QS] First-run setup: installing dependencies & models in background…');
-  spawn('powershell.exe', [
-    '-NoProfile', '-ExecutionPolicy', 'Bypass',
-    '-File', scriptPath, '-Silent',
-  ], { windowsHide: true, detached: true }).unref();
+function shouldRunFullInstall(report, prevStatus) {
+  if (report?.needsInstall) return true;
+  if (prevStatus && prevStatus.success === false) return true;
+  return false;
+}
+
+async function runFullDepsInstall(onProgress) {
+  console.log('[QS] Running full dependency install with UI progress…');
+  return runPowerShellScript('install-deps.ps1', ['-StreamProgress'], {
+    hideWindow: true,
+    onProgress: onProgress,
+  });
+}
+
+async function runQuickStartDeps() {
+  await runPowerShellScript('check-deps.ps1', ['-QuickStart', '-Quiet'], {
+    timeoutMs: 30000,
+  });
+}
+
+async function showMissingDepsDialog(issues, isSetupPhase = false) {
+  const list = (issues && issues.length)
+    ? issues.map((i) => `• ${i}`).join('\n')
+    : '• Some components are missing or not running';
+
+  const { response } = await dialog.showMessageBox({
+    type: 'warning',
+    title: 'QS Assistant — dependencies',
+    message: isSetupPhase
+      ? 'Setup did not finish successfully'
+      : 'Some components need attention',
+    detail:
+      `${list}\n\n` +
+      'Chat needs Ollama running with AI models.\n' +
+      'Document search needs Python + ChromaDB.\n\n' +
+      'You can retry setup, install Ollama manually, or continue with limited features.',
+    buttons: ['Retry setup', 'Open Ollama website', 'Continue anyway'],
+    defaultId: 0,
+    cancelId: 2,
+  });
+
+  if (response === 0) return 'retry';
+  if (response === 1) {
+    shell.openExternal('https://ollama.com');
+    return 'ollama';
+  }
+  return 'continue';
+}
+
+async function ensureDependenciesWithUI() {
+  if (!fs.existsSync(appDataDir)) {
+    fs.mkdirSync(appDataDir, { recursive: true });
+  }
+
+  let report = await runDepsReport();
+  let prevStatus = readDepsStatus();
+
+  while (shouldRunFullInstall(report, prevStatus)) {
+    updateSplashStatus('Installing AI dependencies…');
+    updateSplashHint('Internet required. First setup may take 10–30 minutes.');
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.setSize(480, 400);
+    }
+
+    const { code } = await runFullDepsInstall((line) => {
+      if (line) {
+        updateSplashStatus(line);
+        updateSplashLog(line);
+      }
+    });
+
+    report = await runDepsReport();
+    prevStatus = readDepsStatus();
+
+    if (code === 0 && !report.needsInstall && report.ok) {
+      updateSplashHint('');
+      break;
+    }
+
+    const action = await showMissingDepsDialog(report.issues || [], true);
+    if (action === 'retry') {
+      prevStatus = { success: false };
+      continue;
+    }
+    if (action === 'ollama') {
+      prevStatus = { success: false };
+      continue;
+    }
+    break;
+  }
+
+  updateSplashHint('');
+  updateSplashStatus('Starting local services…');
+  await runQuickStartDeps();
 }
 
 let chromaProcess = null;
@@ -297,7 +409,7 @@ async function startServicesIfNeeded() {
 function createSplashWindow() {
   splashWindow = new BrowserWindow({
     width: 480,
-    height: 320,
+    height: 360,
     frame: false,
     resizable: false,
     alwaysOnTop: true,
@@ -463,19 +575,28 @@ app.whenReady().then(async () => {
     if (!startBackend()) return;
 
     updateSplashStatus('Checking dependencies…');
-    const depsPromise = runDependencyEnsure({ quickStart: true, timeoutMs: 20000 });
+    await ensureDependenciesWithUI();
 
-    updateSplashStatus('Starting local services…');
-    const servicesPromise = startServicesIfNeeded();
+    await startServicesIfNeeded();
 
-    await Promise.all([depsPromise, servicesPromise]);
+    const report = await runDepsReport();
+    if (report.issues?.length && !report.ok) {
+      const action = await showMissingDepsDialog(report.issues);
+      if (action === 'retry') {
+        await runFullDepsInstall((line) => {
+          if (line) {
+            updateSplashStatus(line);
+            updateSplashLog(line);
+          }
+        });
+        await startServicesIfNeeded();
+      }
+    }
 
     updateSplashStatus('Opening workspace…');
     await waitForHealth(90);
     createWindow();
     try { createTray(); } catch { /* optional */ }
-
-    pullModelsInBackground();
   } catch (err) {
     if (splashWindow) { splashWindow.close(); splashWindow = null; }
     console.error('Launch failed:', err);

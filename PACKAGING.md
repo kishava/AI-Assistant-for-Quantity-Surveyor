@@ -82,9 +82,15 @@ Prefer **`npm run dist`** — one pipeline for portable + NSIS installer.
 
 ## End-user prerequisites
 
-Installed automatically by the NSIS installer hook (`desktop\build\installer.nsh`):
+Installed automatically:
 
-- Ollama + models: `phi3:mini`, `nomic-embed-text`, `moondream`
-- Python + ChromaDB
+| When | What happens |
+|------|----------------|
+| **Installer setup** | Visible PowerShell progress (`install-deps.ps1 -ShowWindow`) |
+| **Portable / app first launch** | Splash screen shows install progress (`-StreamProgress`) |
+| **Failed setup** | `deps-status.json` records failure; app offers **Retry setup** on next launch |
+| **Every launch** | Missing-deps dialog if Ollama/Chroma still down |
 
-Data directory: `%APPDATA%\QS-AI\`
+Components: Ollama, models (`phi3:mini`, `nomic-embed-text`, `moondream`), Python, ChromaDB.
+
+Data directory: `%APPDATA%\QS-AI\` (includes `deps-status.json`)

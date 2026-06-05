@@ -1,6 +1,6 @@
 {
   "name": "qs-ai",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "type": "module",
   "description": "QS AI Assistant — run backend and frontend together",

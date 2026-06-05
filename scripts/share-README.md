@@ -41,14 +41,17 @@ Region defaults: **SAR** (Saudi Riyal). Ask for **AED** (UAE Dirham) in chat if 
 
 ## First-time prerequisites
 
-QS Assistant runs **locally** on your machine. For full features you need:
+QS Assistant runs **locally** on your machine. On first launch it will **automatically install** (internet required):
 
 | Component | Purpose |
 |-----------|---------|
 | **Ollama** | Local AI (chat & BOQ answers) |
-| **ChromaDB** | Document search (optional but recommended) |
+| **AI models** | phi3:mini, nomic-embed-text, moondream |
+| **Python + ChromaDB** | Document search |
 
-The **installer** can set these up automatically on first run. Portable users may need Ollama installed separately: https://ollama.com
+- **Installer:** setup runs a visible progress window during installation (10–30 min).
+- **Portable:** same setup runs on **first app launch** with an on-screen progress panel.
+- If setup fails, QS Assistant offers **Retry setup** on the next launch.
 
 ---
 
